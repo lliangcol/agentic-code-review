@@ -48,7 +48,7 @@
 
 | ID | 事项 | 当前事实 | 状态 | 决策和原因 |
 | --- | --- | --- | --- | --- |
-| P1-01 | 校验 review runner 配置和 prompt manifest 形态。 | 配置和 manifest 目前能通过 JSON 合法性检查，但没有专门校验 runner 字段的 schema 或 validator。 | 未完成。 | 增加仅依赖标准库的轻量 validator，因为 runner 已经是主要 LLM 抽象面。 |
+| P1-01 | 校验 review runner 配置和 prompt manifest 形态。 | `validate_review_runner.py` 现在会检查 runner config、prompt manifest、providers、fallbacks、templates、passes 和 output contracts。 | 第 3 轮完成。 | 增加仅依赖标准库的轻量 validator，因为 runner 已经是主要 LLM 抽象面。 |
 | P1-02 | 强制校验 command provider 的结构化 review 输出契约。 | runner 现在会在 fusion 前校验结构化输出必要字段和顶层字段类型。 | 第 2 轮完成。 | 非法 reviewer 输出应作为需要确认的证据，而不是干净通过。 |
 | P1-03 | 加强 prompt template 版本策略。 | Templates 已经有 ID 和 version；变更策略与 schema 检查只部分显式。 | 未完成。 | 增加校验和文档，让 prompt 变更可审计、可回滚。 |
 | P1-04 | 保持 multi-provider 行为最小但明确。 | `mock` 和 `command` providers 可以覆盖多种外部工具且不引入 SDK 依赖。原生 OpenAI/Anthropic SDK providers 是 `unspecified`。 | 作为设计决策保持打开。 | 暂不加 SDK providers，以降低依赖重量；把 command-provider contract 记录为受支持扩展点。 |
@@ -115,6 +115,28 @@ python -m unittest discover -s tests
 文档更新：在本 backlog 中标记 P1-02 完成，并记录本轮切片。
 
 兼容性影响：只新增 report 字段。现有 configs、mock defaults、command-provider contract、安装路径和 review-only 行为保持不变。
+
+验证步骤：
+
+```powershell
+python -m unittest tests.test_skill_scripts.ReviewRunnerTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+```
+
+## 第 3 轮执行记录
+
+当前问题：runner config 和 prompt manifest assets 可能 JSON 合法，但仍包含非法 provider 引用、fallback 目标、template 引用或 output-contract metadata。默认 runner smoke check 只覆盖启用的 mock passes。
+
+拟议方案：新增一个仅依赖标准库的 validator，在不访问模型 provider 的情况下校验 config、prompt manifest、provider definitions、fallback references、review passes、templates、run settings 和 output contracts。
+
+代码或配置改动：新增 `validate_review_runner.py`；接入仓库校验、CI py_compile 和 CI JSON smoke；在 README 记录命令；增加默认配置通过和 missing fallback 失败测试。
+
+测试：运行聚焦的 review-runner 测试、全量单元测试和仓库校验。
+
+文档更新：在本 backlog 中标记 P1-01 完成，更新 README 和 changelog。
+
+兼容性影响：只新增脚本和 CI 检查。现有 runner config shape、command-provider 行为、mock defaults、Skill 打包和 runtime 支持保持不变。
 
 验证步骤：
 

@@ -6,6 +6,8 @@ This project follows a lightweight changelog format inspired by Keep a Changelog
 
 Added optional provider-abstracted review runner assets and script with prompt manifest versioning, dry-run/mock defaults, command-provider fallback, estimated token/cost reporting, and diff-rule fusion.
 
+Added review runner config and prompt manifest validation, including provider, fallback, template, and output-contract checks.
+
 Added reviewer adjudication overlays for GitHub metrics collection so AI finding quality fields can be derived from reviewer-comparison records instead of staying fixed at zero.
 
 Strengthened CI and repository validation with explicit Python 3.10/3.11/3.12 coverage, runner smoke checks, legacy repository slug detection, and secret-like value scanning.

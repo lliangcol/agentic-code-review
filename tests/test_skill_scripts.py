@@ -18,6 +18,7 @@ VALIDATE_METRICS = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "v
 VALIDATE_BATCH_TRIAGE = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "validate_batch_triage.py"
 VALIDATE_REVIEWER_COMPARISON = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "validate_reviewer_comparison.py"
 VALIDATE_HOSTILE_FIXTURES = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "validate_hostile_fixtures.py"
+VALIDATE_REVIEW_RUNNER = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "validate_review_runner.py"
 COLLECT_GITHUB_METRICS = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "collect_github_metrics.py"
 DETECT_REVIEW_FIX_LOOP = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "detect_review_fix_loop.py"
 RUN_REVIEW_PASSES = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "run_review_passes.py"
@@ -993,6 +994,75 @@ class MetricsCollectionTests(unittest.TestCase):
 
 
 class ReviewRunnerTests(unittest.TestCase):
+    def test_validate_review_runner_default_config(self) -> None:
+        result = run(
+            [
+                sys.executable,
+                str(VALIDATE_REVIEW_RUNNER),
+                "--format",
+                "json",
+            ],
+            REPO_ROOT,
+        )
+        data = json.loads(result.stdout)
+
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["errors"], [])
+        self.assertIn("mock-primary", data["providers"])
+        self.assertEqual(data["review_passes"], 3)
+
+    def test_validate_review_runner_missing_fallback_fails_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "broken": {
+                                "type": "command",
+                                "model": "broken",
+                                "command": [sys.executable, "-c", "print('{}')"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "missing-fallback",
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "broken",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn("providers.broken.fallback references unknown provider: missing-fallback", data["errors"])
+            self.assertNotIn("Traceback", result.stderr)
+
     def test_review_runner_dry_run_omits_prompts_by_default(self) -> None:
         result = run(
             [

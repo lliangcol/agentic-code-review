@@ -105,6 +105,7 @@ $requiredFiles = @(
     'skills/agentic-code-review/scripts/validate_hostile_fixtures.py',
     'skills/agentic-code-review/scripts/validate_metrics.py',
     'skills/agentic-code-review/scripts/validate_reviewer_comparison.py',
+    'skills/agentic-code-review/scripts/validate_review_runner.py',
     'skills/agentic-code-review/references/review-intake.md',
     'skills/agentic-code-review/references/review-effort-signals.md',
     'skills/agentic-code-review/references/risk-model.md',

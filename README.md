@@ -211,6 +211,12 @@ For a local runner smoke check that does not contact a model provider:
 python .\skills\agentic-code-review\scripts\run_review_passes.py --dry-run --no-diff --format json
 ```
 
+Validate the runner config and prompt manifest without contacting a model provider:
+
+```powershell
+python .\skills\agentic-code-review\scripts\validate_review_runner.py --format json
+```
+
 For a Claude Code smoke check, install to a test repository's `.claude/skills` directory or the configured global Claude skills destination, confirm the installed folder contains `SKILL.md`, `references/`, `assets/`, and `scripts/`, then invoke `/agentic-code-review` in Claude Code from that test repository.
 
 ## Project Layout
@@ -263,6 +269,7 @@ skills/agentic-code-review/scripts/validate_batch_triage.py
 skills/agentic-code-review/scripts/validate_hostile_fixtures.py
 skills/agentic-code-review/scripts/validate_metrics.py
 skills/agentic-code-review/scripts/validate_reviewer_comparison.py
+skills/agentic-code-review/scripts/validate_review_runner.py
 tests/test_skill_scripts.py
 scripts/check-skill.ps1
 scripts/install-local.ps1

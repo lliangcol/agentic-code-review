@@ -67,7 +67,8 @@ jobs:
             ./skills/agentic-code-review/scripts/validate_batch_triage.py `
             ./skills/agentic-code-review/scripts/validate_hostile_fixtures.py `
             ./skills/agentic-code-review/scripts/validate_metrics.py `
-            ./skills/agentic-code-review/scripts/validate_reviewer_comparison.py
+            ./skills/agentic-code-review/scripts/validate_reviewer_comparison.py `
+            ./skills/agentic-code-review/scripts/validate_review_runner.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           Invoke-JsonSmoke ./skills/agentic-code-review/scripts/measure_diff.py @('--format', 'json', '--no-untracked')
@@ -77,6 +78,7 @@ jobs:
           Invoke-JsonSmoke ./skills/agentic-code-review/scripts/validate_hostile_fixtures.py @('--format', 'json')
           Invoke-JsonSmoke ./skills/agentic-code-review/scripts/validate_metrics.py @('--format', 'json')
           Invoke-JsonSmoke ./skills/agentic-code-review/scripts/validate_reviewer_comparison.py @('--format', 'json')
+          Invoke-JsonSmoke ./skills/agentic-code-review/scripts/validate_review_runner.py @('--format', 'json')
           python -m unittest discover -s tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installDest = Join-Path $env:RUNNER_TEMP "agentic-code-review-skills"

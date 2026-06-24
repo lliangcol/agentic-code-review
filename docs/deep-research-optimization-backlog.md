@@ -48,7 +48,7 @@ Guardrails:
 
 | ID | Item | Current fact | Status | Decision and reason |
 | --- | --- | --- | --- | --- |
-| P1-01 | Validate review runner configuration and prompt manifest shape. | Config and manifest are JSON-valid, but there is no dedicated schema or validator for runner-specific fields. | Open. | Add a lightweight standard-library validator because the runner is now the main LLM abstraction surface. |
+| P1-01 | Validate review runner configuration and prompt manifest shape. | `validate_review_runner.py` now checks runner config, prompt manifest, providers, fallbacks, templates, passes, and output contracts. | Complete in round 3. | Add a lightweight standard-library validator because the runner is now the main LLM abstraction surface. |
 | P1-02 | Enforce structured review output contracts from command providers. | The runner now validates structured output required fields and top-level field types before fusion. | Complete in round 2. | Treat invalid reviewer output as non-blocking evidence that needs confirmation, not as a clean pass. |
 | P1-03 | Strengthen prompt template versioning policy. | Templates have IDs and versions; change policy and schema checks are only partially explicit. | Open. | Add validation and documentation so prompt changes are auditable and rollback-friendly. |
 | P1-04 | Keep multi-provider behavior minimal but explicit. | `mock` and `command` providers support many external tools without SDK dependencies. Native OpenAI/Anthropic SDK providers are `unspecified`. | Open as design decision. | Avoid SDK providers for now to keep dependency weight low; document command-provider contract as the supported extension point. |
@@ -115,6 +115,28 @@ Tests: run the focused review-runner test class, full unit suite, and repository
 Documentation update: mark P1-02 complete in this backlog and record this slice.
 
 Compatibility impact: additive report fields only. Existing configs, mock defaults, command-provider contract, install paths, and review-only behavior remain unchanged.
+
+Validation steps:
+
+```powershell
+python -m unittest tests.test_skill_scripts.ReviewRunnerTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+```
+
+## Round 3 Execution Record
+
+Current problem: runner config and prompt manifest assets could be JSON-valid while still containing invalid provider references, fallback targets, template references, or output-contract metadata. The default runner smoke check only exercised enabled mock passes.
+
+Proposed solution: add a standard-library validator that checks config, prompt manifest, provider definitions, fallback references, review passes, templates, run settings, and output contracts without contacting a model provider.
+
+Code or configuration changes: add `validate_review_runner.py`; wire it into repository validation, CI py_compile, and CI JSON smoke; document the command in README; add unit tests for the default config and a missing fallback failure.
+
+Tests: run the focused review-runner tests, full unit suite, and repository validation.
+
+Documentation update: mark P1-01 complete in this backlog, update README, and update the changelog.
+
+Compatibility impact: additive script and CI check only. Existing runner config shape, command-provider behavior, mock defaults, Skill packaging, and runtime support remain unchanged.
 
 Validation steps:
 

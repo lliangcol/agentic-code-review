@@ -216,6 +216,12 @@ python (Join-Path $codexHome "skills/.system/skill-creator/scripts/quick_validat
 python .\skills\agentic-code-review\scripts\run_review_passes.py --dry-run --no-diff --format json
 ```
 
+如需在不访问模型 provider 的情况下校验 runner config 和 prompt manifest：
+
+```powershell
+python .\skills\agentic-code-review\scripts\validate_review_runner.py --format json
+```
+
 Claude Code smoke check 可安装到测试仓库的 `.claude/skills` 目录或已配置的全局 Claude skills 目标目录，确认已安装目录包含 `SKILL.md`、`references/`、`assets/` 和 `scripts/`，再在该测试仓库的 Claude Code 中调用 `/agentic-code-review`。
 
 ## 项目结构
@@ -268,6 +274,7 @@ skills/agentic-code-review/scripts/validate_batch_triage.py
 skills/agentic-code-review/scripts/validate_hostile_fixtures.py
 skills/agentic-code-review/scripts/validate_metrics.py
 skills/agentic-code-review/scripts/validate_reviewer_comparison.py
+skills/agentic-code-review/scripts/validate_review_runner.py
 tests/test_skill_scripts.py
 scripts/check-skill.ps1
 scripts/install-local.ps1
