@@ -51,7 +51,9 @@
 
 发布或导入收集到的指标前，运行 `scripts/validate_metrics.py path/to/metrics.csv`。它不依赖外部包，会校验必要列、数值范围和日期形态。
 
-使用 `scripts/collect_github_metrics.py exported-prs.json --repository owner/repo --period-start YYYY-MM-DD --period-end YYYY-MM-DD` 从 GitHub PR JSON 生成起始 metrics row。AI finding quality 字段仍然需要人工 adjudication。
+使用 `scripts/collect_github_metrics.py exported-prs.json --repository owner/repo --period-start YYYY-MM-DD --period-end YYYY-MM-DD` 从 GitHub PR JSON 生成起始 metrics row。
+
+完成人工 adjudication 后，用 `--adjudication-json path/to/reviewer-comparison.json` 传入 reviewer-comparison 记录，填充 `valid_ai_findings`、`false_positive_ai_findings` 和 `reviewer_overlap_count`。没有经过裁定的 reviewer evidence 时可省略该参数；CSV 保持向后兼容，这些字段仍为 `0`。
 
 ## 使用
 

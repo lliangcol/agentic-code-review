@@ -1,6 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Support policy
-    url: https://github.com/lliangcol/agentic-code-review-skill/blob/main/SUPPORT.md
+    url: https://github.com/lliangcol/agentic-code-review/blob/main/SUPPORT.md
     about: Read the support boundaries before filing an issue.
-

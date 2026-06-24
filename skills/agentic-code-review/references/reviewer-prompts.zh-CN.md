@@ -6,6 +6,8 @@
 
 用目标仓库、diff 或命令输出替换方括号占位符。除非任务明确是 verification，否则不要把一个 pass 的 findings 粘贴给另一个 pass。
 
+对自动化或重复的本地 passes，使用 `assets/review-prompt-manifest.json` 作为版本化 prompt 来源，并使用 `scripts/run_review_passes.py` 作为可选 runner。
+
 ## Correctness And Regression
 
 Review `[target]` for confirmed correctness regressions. Focus on changed behavior, edge cases, existing contracts, data transformations, and caller expectations. Ignore style-only comments. Return only source-backed findings with file and line evidence, plus any validation that would confirm or falsify them.

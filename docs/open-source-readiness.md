@@ -7,8 +7,10 @@ Use this checklist before the first public GitHub push and before any later publ
 - Worktree status is intentional. No generated caches, local runtime state, private notes, or downloaded article artifacts are staged.
 - `scripts/check-skill.ps1` passes on the current worktree.
 - `python -m unittest discover -s tests` passes.
+- `python skills/agentic-code-review/scripts/run_review_passes.py --dry-run --no-diff --format json` passes without contacting a model provider.
 - Codex Skill validation runs when the Codex validator is available.
 - A local security scan finds no secrets, private keys, tokens, or private workstation paths in tracked files.
+- Public files contain no legacy repository links from the previous project name.
 - The installed Skill smoke check copies only `SKILL.md`, `references/`, `assets/`, `scripts/`, and runtime metadata needed by supported runtimes.
 
 ## Public Repository Files

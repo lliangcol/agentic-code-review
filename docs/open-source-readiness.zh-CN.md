@@ -7,8 +7,10 @@
 - 工作区状态是有意的；没有生成缓存、本地 runtime 状态、私有笔记或下载的文章原文产物被暂存。
 - `scripts/check-skill.ps1` 在当前工作区通过。
 - `python -m unittest discover -s tests` 通过。
+- `python skills/agentic-code-review/scripts/run_review_passes.py --dry-run --no-diff --format json` 通过，且不访问模型 provider。
 - 当 Codex validator 可用时，运行 Codex Skill 校验。
 - 本地安全扫描没有在已跟踪文件中发现 secrets、私钥、token 或私有工作站路径。
+- 公开文件不包含来自旧项目名的旧仓库链接。
 - 已安装 Skill 的 smoke check 只复制受支持 runtime 所需的 `SKILL.md`、`references/`、`assets/`、`scripts/` 和 runtime 元数据。
 
 ## 公开仓库文件

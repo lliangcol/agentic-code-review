@@ -4,6 +4,12 @@
 
 ## 未发布
 
+增加可选的 provider 抽象 review runner 资产和脚本，支持 prompt manifest 版本管理、dry-run/mock 默认值、command-provider fallback、估算 token/cost 报告，以及 diff 规则信号融合。
+
+为 GitHub metrics collection 增加 reviewer adjudication overlay，使 AI finding quality 字段可从 reviewer-comparison 记录推导，而不是固定为零。
+
+加强 CI 和仓库校验，增加明确的 Python 3.10/3.11/3.12 覆盖、runner smoke checks、旧仓库 slug 检测和 secret-like value 扫描。
+
 初始化 `agentic-code-review` 项目骨架。
 
 增加双语文档、GitHub 社区文件、Skill 引用资料、接入模板和可选 `review-fix-loop` 集成指南。

@@ -31,6 +31,8 @@ For batch PR or multi-diff triage, read `references/batch-triage.md` and treat t
 
 For high-risk review, multi-pass review, or AI-reviewer comparison, read `references/heterogeneous-reviewers.md`. Read `references/reviewer-prompts.md` when concrete independent reviewer prompts are useful.
 
+When the user asks to run local independent reviewer passes, use `assets/review-prompt-manifest.json`, `assets/review-runner.config.example.json`, and `scripts/run_review_passes.py`. Treat the runner report as review evidence, not merge approval.
+
 For high-volume agent review loops, sampling, spot-checking, or model-only review audit, read `references/human-on-the-loop-audit.md`.
 
 For solo, small-team, or large-system adoption profiles and transition triggers, read `references/adoption.md`.

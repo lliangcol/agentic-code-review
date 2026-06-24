@@ -32,6 +32,8 @@
 
 需要具体 role prompts 时，读取 `references/reviewer-prompts.md`。比较前保持每个 pass 不知道其他 pass 的结果。
 
+需要本地、版本化、provider 抽象的独立 pass runner 时，使用 `assets/review-prompt-manifest.json` 和 `scripts/run_review_passes.py`。CI 或 dry-run 校验保留默认 `mock` provider；只有在目标仓库拥有外部模型调用责任时才配置 command providers。
+
 当 reviewer evidence 需要为校准、审计或高风险合并决策留档时，使用 `assets/reviewer-comparison.template.md` 或 `assets/reviewer-comparison.schema.json`。
 
 将 JSON reviewer comparison records 导入团队指标或 review reports 前，使用 `scripts/validate_reviewer_comparison.py` 校验。

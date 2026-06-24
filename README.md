@@ -2,7 +2,7 @@
 
 Simplified Chinese: [README.zh-CN.md](README.zh-CN.md)
 
-[![Validate](https://github.com/lliangcol/agentic-code-review-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/lliangcol/agentic-code-review-skill/actions/workflows/validate.yml)
+[![Validate](https://github.com/lliangcol/agentic-code-review/actions/workflows/validate.yml/badge.svg)](https://github.com/lliangcol/agentic-code-review/actions/workflows/validate.yml)
 
 ## Overview
 
@@ -18,6 +18,13 @@ It defaults to review-only, checks whether a change is reviewable, uses cheap re
 | Claude Code | Supported by installing the same Skill directory under the configured Claude skills directory, normally `~/.claude/skills/agentic-code-review/` or `$CLAUDE_CONFIG_DIR/skills/agentic-code-review/` when set, or under a project `.claude/skills/agentic-code-review/` directory. |
 | Shared Skill content | `SKILL.md`, `references/`, `assets/`, and `scripts/` stay single-source for both runtimes. |
 | Runtime-specific metadata | Codex-specific metadata remains under `agents/openai.yaml`; Claude Code uses directory-based skill discovery and `CLAUDE.md` project memory guidance. |
+
+## Requirements
+
+- Python 3.10 or newer for local helper scripts and tests.
+- Git for diff measurement, install packaging, and repository validation.
+- PowerShell 7 or newer for cross-platform `.ps1` execution. Windows PowerShell can run the scripts on Windows, but CI validates with `pwsh`.
+- No API key is required for repository validation. Optional command providers for the review runner should read secrets from their own environment and must not store secrets in config files.
 
 ## Why
 
@@ -113,6 +120,55 @@ AI-generated throughput can increase review and QA load. Do not use throughput a
 
 Use `skills/agentic-code-review/assets/review-capacity-metrics.template.csv` and `skills/agentic-code-review/assets/review-capacity-metrics.schema.json` as starter artifacts for team metric collection. Validate collected metrics with `skills/agentic-code-review/scripts/validate_metrics.py`; derive starter rows from exported GitHub PR JSON with `skills/agentic-code-review/scripts/collect_github_metrics.py`.
 
+To include AI reviewer quality fields, pass one or more reviewer-comparison or adjudication records:
+
+```powershell
+python .\skills\agentic-code-review\scripts\collect_github_metrics.py .\prs.json `
+  --repository owner/repo `
+  --period-start 2026-01-01 `
+  --period-end 2026-01-07 `
+  --adjudication-json .\reviewer-comparison.json
+```
+
+## Optional Review Runner
+
+The repository includes an optional standard-library runner for teams that want a local, auditable LLM/agent call chain without binding this Skill to one SDK or provider. The default config uses `mock` providers, so it is safe for CI and smoke tests.
+
+```powershell
+python .\skills\agentic-code-review\scripts\run_review_passes.py --dry-run --no-diff --format json
+```
+
+The runner provides:
+
+- Provider abstraction through `mock` and `command` providers.
+- Multi-pass prompt orchestration from `assets/review-prompt-manifest.json`.
+- Prompt versioning through template IDs and versions.
+- Timeout, retry, and fallback provider behavior.
+- Estimated token and cost accounting.
+- Structured JSON reports with diff-rule fusion from `measure_diff.py`.
+- Prompt omission by default; pass `--include-prompts` only when you intentionally want rendered prompts in the report.
+
+Configure it with `skills/agentic-code-review/assets/review-runner.config.example.json`. A command provider receives the rendered prompt on stdin and must write its review output to stdout:
+
+Diff measurement defaults to the unstaged working-tree diff through `measure_diff_args: ["--no-untracked"]`. For a staged commit candidate, use `["--staged", "--no-untracked"]`; for a branch or working tree against a base revision, use `["--base", "origin/main", "--no-untracked"]`.
+
+```json
+{
+  "type": "command",
+  "model": "external-reviewer-command",
+  "command": ["example-reviewer", "--format", "json"],
+  "timeout_seconds": 120,
+  "max_retries": 1,
+  "fallback": "mock-fallback",
+  "pricing": {
+    "input_per_million_tokens_usd": 0,
+    "output_per_million_tokens_usd": 0
+  }
+}
+```
+
+Compatibility impact: this runner is additive. Existing Skill installation, prompts, validators, and review-only behavior continue to work without using it.
+
 ## Optional review-fix-loop Integration
 
 `review-fix-loop` is optional. When requested or detected, this Skill uses it as the fresh-snapshot execution contract.
@@ -148,6 +204,12 @@ python (Join-Path $codexHome "skills/.system/skill-creator/scripts/quick_validat
 ```
 
 The repository validation script is required. The Codex Skill validator is optional and Codex-specific because not every environment has it installed.
+
+For a local runner smoke check that does not contact a model provider:
+
+```powershell
+python .\skills\agentic-code-review\scripts\run_review_passes.py --dry-run --no-diff --format json
+```
 
 For a Claude Code smoke check, install to a test repository's `.claude/skills` directory or the configured global Claude skills destination, confirm the installed folder contains `SKILL.md`, `references/`, `assets/`, and `scripts/`, then invoke `/agentic-code-review` in Claude Code from that test repository.
 
@@ -185,6 +247,8 @@ skills/agentic-code-review/assets/forward-test-scenarios.json
 skills/agentic-code-review/assets/hostile-input-fixtures.md
 skills/agentic-code-review/assets/hostile-input-fixtures.json
 skills/agentic-code-review/assets/review-effort.config.example.json
+skills/agentic-code-review/assets/review-prompt-manifest.json
+skills/agentic-code-review/assets/review-runner.config.example.json
 skills/agentic-code-review/assets/review-capacity-metrics.template.csv
 skills/agentic-code-review/assets/review-capacity-metrics.schema.json
 skills/agentic-code-review/assets/reviewer-comparison.example.json
@@ -194,6 +258,7 @@ skills/agentic-code-review/agents/openai.yaml
 skills/agentic-code-review/scripts/collect_github_metrics.py
 skills/agentic-code-review/scripts/detect_review_fix_loop.py
 skills/agentic-code-review/scripts/measure_diff.py
+skills/agentic-code-review/scripts/run_review_passes.py
 skills/agentic-code-review/scripts/validate_batch_triage.py
 skills/agentic-code-review/scripts/validate_hostile_fixtures.py
 skills/agentic-code-review/scripts/validate_metrics.py

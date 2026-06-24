@@ -51,7 +51,9 @@ Use `assets/review-capacity-metrics.schema.json` when a team wants to validate c
 
 Run `scripts/validate_metrics.py path/to/metrics.csv` before publishing or importing collected metrics. It validates required columns, numeric ranges, and date shape without external dependencies.
 
-Use `scripts/collect_github_metrics.py exported-prs.json --repository owner/repo --period-start YYYY-MM-DD --period-end YYYY-MM-DD` to derive a starter metrics row from GitHub PR JSON. AI finding quality fields still require human adjudication.
+Use `scripts/collect_github_metrics.py exported-prs.json --repository owner/repo --period-start YYYY-MM-DD --period-end YYYY-MM-DD` to derive a starter metrics row from GitHub PR JSON.
+
+After human adjudication, pass reviewer-comparison records with `--adjudication-json path/to/reviewer-comparison.json` to fill `valid_ai_findings`, `false_positive_ai_findings`, and `reviewer_overlap_count`. Omit this flag when no adjudicated reviewer evidence exists; the CSV remains backward compatible and leaves those fields at `0`.
 
 ## Use
 

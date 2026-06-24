@@ -6,6 +6,8 @@ Use these prompts for independent review passes. Run each pass separately and co
 
 Replace bracketed placeholders with the target repository, diff, or command output. Do not paste one pass's findings into another pass unless the task is explicitly verification.
 
+For automated or repeated local passes, use `assets/review-prompt-manifest.json` as the versioned prompt source and `scripts/run_review_passes.py` as the optional runner.
+
 ## Correctness And Regression
 
 Review `[target]` for confirmed correctness regressions. Focus on changed behavior, edge cases, existing contracts, data transformations, and caller expectations. Ignore style-only comments. Return only source-backed findings with file and line evidence, plus any validation that would confirm or falsify them.

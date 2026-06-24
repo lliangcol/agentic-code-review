@@ -32,6 +32,8 @@ If only one model or tool is available, simulate heterogeneity by running separa
 
 Read `references/reviewer-prompts.md` when you need concrete role prompts. Keep each pass blind to the other passes until comparison.
 
+Use `assets/review-prompt-manifest.json` and `scripts/run_review_passes.py` when you need a local, versioned, provider-abstracted runner for independent passes. Keep the default `mock` provider for CI or dry-run validation; configure command providers only in repositories that own the external model invocation.
+
 Use `assets/reviewer-comparison.template.md` or `assets/reviewer-comparison.schema.json` when reviewer evidence must be persisted for calibration, audit, or a high-risk merge decision.
 
 Use `scripts/validate_reviewer_comparison.py` to validate JSON reviewer comparison records before importing them into team metrics or review reports.

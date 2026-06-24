@@ -120,7 +120,69 @@ def extract_prs(data: Any) -> list[dict[str, Any]]:
     raise SystemExit("Input must be a JSON array or an object with pull_requests/prs/items")
 
 
-def collect(prs: list[dict[str, Any]], repository: str, period_start: str, period_end: str) -> dict[str, object]:
+def extract_adjudication_records(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        for key in ["reviewer_comparisons", "adjudications", "items"]:
+            value = data.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+        return [data]
+    raise ValueError("adjudication input must be a JSON object, an array, or an object with reviewer_comparisons/adjudications/items")
+
+
+def count_reviewer_findings(record: dict[str, Any], field: str) -> int:
+    total = 0
+    reviewers = record.get("reviewers", [])
+    if not isinstance(reviewers, list):
+        raise ValueError("adjudication.reviewers must be an array")
+    for reviewer_index, reviewer in enumerate(reviewers):
+        if not isinstance(reviewer, dict):
+            raise ValueError(f"adjudication.reviewers[{reviewer_index}] must be an object")
+        value = reviewer.get(field, 0)
+        if type(value) is not int or value < 0:
+            raise ValueError(f"adjudication.reviewers[{reviewer_index}].{field} must be a non-negative integer")
+        total += value
+    return total
+
+
+def count_string_items(record: dict[str, Any], field: str) -> int:
+    value = record.get(field, [])
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"adjudication.{field} must be an array of strings")
+    return len(set(value))
+
+
+def summarize_ai_quality(adjudications: list[dict[str, Any]]) -> dict[str, int]:
+    valid_ai_findings = 0
+    false_positive_ai_findings = 0
+    reviewer_overlap_count = 0
+
+    for record in adjudications:
+        valid = count_reviewer_findings(record, "valid_findings")
+        false_positive = count_reviewer_findings(record, "false_positive_findings")
+        unique_adjudicated = count_string_items(record, "confirmed_findings") + count_string_items(record, "rejected_findings")
+        total_classified = valid + false_positive
+
+        valid_ai_findings += valid
+        false_positive_ai_findings += false_positive
+        reviewer_overlap_count += max(0, total_classified - unique_adjudicated)
+
+    return {
+        "valid_ai_findings": valid_ai_findings,
+        "false_positive_ai_findings": false_positive_ai_findings,
+        "reviewer_overlap_count": reviewer_overlap_count,
+    }
+
+
+def collect(
+    prs: list[dict[str, Any]],
+    repository: str,
+    period_start: str,
+    period_end: str,
+    adjudications: list[dict[str, Any]] | None = None,
+) -> dict[str, object]:
     first_review_hours: list[float] = []
     review_duration_hours: list[float] = []
     files_changed: list[float] = []
@@ -180,6 +242,11 @@ def collect(prs: list[dict[str, Any]], repository: str, period_start: str, perio
         if "agent pr abandonment" in labels:
             agent_pr_abandonment_count += 1
 
+    ai_quality = summarize_ai_quality(adjudications or [])
+    notes = "Derived from GitHub PR JSON export; AI finding quality fields require reviewer adjudication."
+    if adjudications:
+        notes = f"Derived from GitHub PR JSON export and {len(adjudications)} reviewer adjudication record(s)."
+
     return {
         "period_start": period_start,
         "period_end": period_end,
@@ -194,11 +261,11 @@ def collect(prs: list[dict[str, Any]], repository: str, period_start: str, perio
         "not_reviewable_count": not_reviewable_count,
         "gate_failure_count": gate_failure_count,
         "rereview_count": rereview_count,
-        "valid_ai_findings": 0,
-        "false_positive_ai_findings": 0,
-        "reviewer_overlap_count": 0,
+        "valid_ai_findings": ai_quality["valid_ai_findings"],
+        "false_positive_ai_findings": ai_quality["false_positive_ai_findings"],
+        "reviewer_overlap_count": ai_quality["reviewer_overlap_count"],
         "agent_pr_abandonment_count": agent_pr_abandonment_count,
-        "notes": "Derived from GitHub PR JSON export; AI finding quality fields require reviewer adjudication.",
+        "notes": notes,
     }
 
 
@@ -208,13 +275,22 @@ def main() -> int:
     parser.add_argument("--repository", required=True)
     parser.add_argument("--period-start", required=True)
     parser.add_argument("--period-end", required=True)
+    parser.add_argument(
+        "--adjudication-json",
+        action="append",
+        default=[],
+        help="Optional reviewer-comparison/adjudication JSON. May be passed multiple times.",
+    )
     parser.add_argument("--format", choices=["csv", "json"], default="csv")
     args = parser.parse_args()
 
     try:
         validate_period(args.period_start, args.period_end)
         prs = extract_prs(load_json(Path(args.input_json)))
-        row = collect(prs, args.repository, args.period_start, args.period_end)
+        adjudications: list[dict[str, Any]] = []
+        for adjudication_path in args.adjudication_json:
+            adjudications.extend(extract_adjudication_records(load_json(Path(adjudication_path))))
+        row = collect(prs, args.repository, args.period_start, args.period_end, adjudications)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": 1,
+  "description": "Example optional review runner config. It stores no secrets. Command providers receive the rendered prompt on stdin and must write review output to stdout.",
+  "prompt_manifest": "review-prompt-manifest.json",
+  "output_contract": "structured-review-v1",
+  "default_provider": "mock-primary",
+  "run": {
+    "measure_diff": true,
+    "measure_diff_timeout_seconds": 30,
+    "measure_diff_args": ["--no-untracked"],
+    "max_output_chars": 20000,
+    "include_prompt_in_report": false
+  },
+  "providers": {
+    "mock-primary": {
+      "type": "mock",
+      "model": "offline-mock-reviewer",
+      "timeout_seconds": 5,
+      "max_retries": 0,
+      "fallback": "mock-fallback",
+      "pricing": {
+        "input_per_million_tokens_usd": 0,
+        "output_per_million_tokens_usd": 0
+      }
+    },
+    "mock-fallback": {
+      "type": "mock",
+      "model": "offline-mock-fallback",
+      "timeout_seconds": 5,
+      "max_retries": 0,
+      "pricing": {
+        "input_per_million_tokens_usd": 0,
+        "output_per_million_tokens_usd": 0
+      }
+    },
+    "command-example": {
+      "type": "command",
+      "model": "external-reviewer-command",
+      "command": ["example-reviewer", "--format", "json"],
+      "timeout_seconds": 120,
+      "max_retries": 1,
+      "fallback": "mock-fallback",
+      "pricing": {
+        "input_per_million_tokens_usd": 0,
+        "output_per_million_tokens_usd": 0
+      }
+    }
+  },
+  "review_passes": [
+    {
+      "id": "correctness",
+      "enabled": true,
+      "template_id": "correctness-regression",
+      "provider": "mock-primary"
+    },
+    {
+      "id": "tests",
+      "enabled": true,
+      "template_id": "test-integrity",
+      "provider": "mock-primary"
+    },
+    {
+      "id": "llm-trust",
+      "enabled": true,
+      "template_id": "llm-trust-boundary",
+      "provider": "mock-primary"
+    }
+  ]
+}

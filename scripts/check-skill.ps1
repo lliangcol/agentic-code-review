@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 function Fail {
     param([string]$Message)
-    throw "[agentic-code-review-skill] $Message"
+    throw "[agentic-code-review] $Message"
 }
 
 function Assert-LineEndings {
@@ -100,6 +100,7 @@ $requiredFiles = @(
     'skills/agentic-code-review/scripts/collect_github_metrics.py',
     'skills/agentic-code-review/scripts/detect_review_fix_loop.py',
     'skills/agentic-code-review/scripts/measure_diff.py',
+    'skills/agentic-code-review/scripts/run_review_passes.py',
     'skills/agentic-code-review/scripts/validate_batch_triage.py',
     'skills/agentic-code-review/scripts/validate_hostile_fixtures.py',
     'skills/agentic-code-review/scripts/validate_metrics.py',
@@ -130,6 +131,8 @@ $requiredFiles = @(
     'skills/agentic-code-review/assets/hostile-input-fixtures.json',
     'skills/agentic-code-review/assets/review-effort.config.example.json',
     'skills/agentic-code-review/assets/review-fix-loop.gates.example.json',
+    'skills/agentic-code-review/assets/review-prompt-manifest.json',
+    'skills/agentic-code-review/assets/review-runner.config.example.json',
     'skills/agentic-code-review/assets/review-capacity-metrics.template.csv',
     'skills/agentic-code-review/assets/review-capacity-metrics.schema.json',
     'skills/agentic-code-review/assets/reviewer-comparison.example.json',
@@ -428,6 +431,13 @@ $blockedPathPatterns = @(
     ('C:' + '[/\\]+' + 'Users' + '[/\\]+' + 'liu liang')
 )
 $blockedArticleArtifact = 'agentic-code-review' + '.html'
+$legacyRepositorySlug = 'lliangcol/agentic-code-review' + '-skill'
+$secretLikePatterns = @(
+    [pscustomobject]@{ Name = 'GitHub token'; Pattern = '\bgh[pousr]_[A-Za-z0-9_]{20,}\b' },
+    [pscustomobject]@{ Name = 'OpenAI API key'; Pattern = '\bsk-[A-Za-z0-9]{32,}\b' },
+    [pscustomobject]@{ Name = 'AWS access key'; Pattern = '\bAKIA[0-9A-Z]{16}\b' },
+    [pscustomobject]@{ Name = 'private key block'; Pattern = '-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----' }
+)
 
 foreach ($entry in $allTextFiles) {
     $file = $entry.File
@@ -443,6 +453,14 @@ foreach ($entry in $allTextFiles) {
     }
     if ($text.Contains($blockedArticleArtifact)) {
         Fail "Downloaded source article artifact must not be referenced as repository content."
+    }
+    if ($text.Contains($legacyRepositorySlug)) {
+        Fail "Legacy repository slug leaked into $relativePath"
+    }
+    foreach ($secretPattern in $secretLikePatterns) {
+        if ($text -match $secretPattern.Pattern) {
+            Fail "Secret-like value detected in ${relativePath}: $($secretPattern.Name)"
+        }
     }
 }
 
@@ -465,6 +483,8 @@ foreach ($jsonRelative in @(
     'skills/agentic-code-review/assets/hostile-input-fixtures.json',
     'skills/agentic-code-review/assets/review-effort.config.example.json',
     'skills/agentic-code-review/assets/review-fix-loop.gates.example.json',
+    'skills/agentic-code-review/assets/review-prompt-manifest.json',
+    'skills/agentic-code-review/assets/review-runner.config.example.json',
     'skills/agentic-code-review/assets/review-capacity-metrics.schema.json',
     'skills/agentic-code-review/assets/reviewer-comparison.example.json',
     'skills/agentic-code-review/assets/reviewer-comparison.schema.json'
@@ -501,4 +521,4 @@ foreach ($column in $requiredMetricColumns) {
     }
 }
 
-Write-Host 'agentic-code-review-skill validation passed.'
+Write-Host 'agentic-code-review validation passed.'

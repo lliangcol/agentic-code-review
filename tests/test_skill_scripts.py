@@ -20,6 +20,7 @@ VALIDATE_REVIEWER_COMPARISON = REPO_ROOT / "skills" / "agentic-code-review" / "s
 VALIDATE_HOSTILE_FIXTURES = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "validate_hostile_fixtures.py"
 COLLECT_GITHUB_METRICS = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "collect_github_metrics.py"
 DETECT_REVIEW_FIX_LOOP = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "detect_review_fix_loop.py"
+RUN_REVIEW_PASSES = REPO_ROOT / "skills" / "agentic-code-review" / "scripts" / "run_review_passes.py"
 INSTALL_LOCAL = REPO_ROOT / "scripts" / "install-local.ps1"
 CHECK_SKILL = REPO_ROOT / "scripts" / "check-skill.ps1"
 ASSETS_DIR = REPO_ROOT / "skills" / "agentic-code-review" / "assets"
@@ -640,6 +641,83 @@ class MetricsCollectionTests(unittest.TestCase):
             self.assertIn("owner/repo", result.stdout)
             self.assertIn("zero_review_merges", result.stdout)
 
+    def test_collect_github_metrics_uses_adjudication_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            adjudication = Path(temp) / "reviewers.json"
+            payload.write_text(
+                json.dumps(
+                    [
+                        {
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "merged_at": "2026-01-02T00:00:00Z",
+                            "changed_files": 1,
+                            "additions": 4,
+                            "deletions": 1,
+                            "reviews": [],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            adjudication.write_text(
+                json.dumps(
+                    {
+                        "repository": "owner/repo",
+                        "revision": "PR-1",
+                        "risk_tier": "L3",
+                        "human_owner": "owner@example.invalid",
+                        "reviewers": [
+                            {
+                                "name": "Correctness",
+                                "tool_or_model": "model-a",
+                                "prompt_or_role": "Correctness",
+                                "findings": 2,
+                                "valid_findings": 2,
+                                "false_positive_findings": 0,
+                            },
+                            {
+                                "name": "Security",
+                                "tool_or_model": "model-b",
+                                "prompt_or_role": "Security",
+                                "findings": 2,
+                                "valid_findings": 1,
+                                "false_positive_findings": 1,
+                            },
+                        ],
+                        "confirmed_findings": ["shared confirmed finding", "unique confirmed finding"],
+                        "rejected_findings": ["rejected finding"],
+                        "residual_human_judgment": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--adjudication-json",
+                    str(adjudication),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertEqual(data["valid_ai_findings"], 3)
+            self.assertEqual(data["false_positive_ai_findings"], 1)
+            self.assertEqual(data["reviewer_overlap_count"], 1)
+            self.assertIn("reviewer adjudication record", data["notes"])
+
     def test_collect_github_metrics_rereviews_validate(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             payload = Path(temp) / "prs.json"
@@ -911,6 +989,283 @@ class MetricsCollectionTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("--period-start must be <= --period-end", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+
+class ReviewRunnerTests(unittest.TestCase):
+    def test_review_runner_dry_run_omits_prompts_by_default(self) -> None:
+        result = run(
+            [
+                sys.executable,
+                str(RUN_REVIEW_PASSES),
+                "--format",
+                "json",
+                "--dry-run",
+                "--no-diff",
+                "--target",
+                "current branch",
+            ],
+            REPO_ROOT,
+        )
+        data = json.loads(result.stdout)
+
+        self.assertEqual(data["schema_version"], "review-runner-report-v1")
+        self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+        self.assertEqual(data["diff"]["enabled"], False)
+        self.assertGreater(data["cost"]["estimated_input_tokens"], 0)
+        self.assertTrue(data["passes"])
+        self.assertTrue(all(item["status"] == "dry_run" for item in data["passes"]))
+        self.assertNotIn("prompt", data["passes"][0])
+
+    def test_review_runner_falls_back_to_mock_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "broken-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "broken-command": {
+                                "type": "command",
+                                "model": "broken",
+                                "command": [sys.executable, "-c", "import sys; sys.exit(3)"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "mock-fallback",
+                                "pricing": {
+                                    "input_per_million_tokens_usd": 1,
+                                    "output_per_million_tokens_usd": 1,
+                                },
+                            },
+                            "mock-fallback": {
+                                "type": "mock",
+                                "model": "fallback",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "pricing": {
+                                    "input_per_million_tokens_usd": 0,
+                                    "output_per_million_tokens_usd": 0,
+                                },
+                            },
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "broken-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertEqual(review_pass["provider"], "mock-fallback")
+            self.assertEqual(review_pass["status"], "mock")
+            self.assertEqual(review_pass["attempts"][0]["provider"], "broken-command")
+            self.assertEqual(review_pass["attempts"][0]["status"], "failed")
+            self.assertEqual(review_pass["structured_output"]["verdict"], "Needs confirmation")
+
+    def test_review_runner_missing_command_falls_back_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "missing-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "missing-command": {
+                                "type": "command",
+                                "model": "missing",
+                                "command": ["agentic-code-review-missing-command-000000"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "mock-fallback",
+                            },
+                            "mock-fallback": {
+                                "type": "mock",
+                                "model": "fallback",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            },
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "missing-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertEqual(review_pass["provider"], "mock-fallback")
+            self.assertEqual(review_pass["status"], "mock")
+            self.assertEqual(review_pass["attempts"][0]["provider"], "missing-command")
+            self.assertEqual(review_pass["attempts"][0]["status"], "failed")
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_review_runner_mixed_mock_status_needs_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            ok_output = {
+                "verdict": "Ready",
+                "risk_tier": "L1",
+                "findings": [],
+                "needs_confirmation": [],
+                "validation": [],
+                "ai_review_evidence": {"reviewer": "ok-command"},
+                "residual_risk": [],
+            }
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "ok-command": {
+                                "type": "command",
+                                "model": "ok",
+                                "command": [sys.executable, "-c", f"import json; print(json.dumps({ok_output!r}))"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            },
+                            "mock-provider": {
+                                "type": "mock",
+                                "model": "mock",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            },
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "ok-command",
+                            },
+                            {
+                                "id": "security",
+                                "enabled": True,
+                                "template_id": "security-abuse",
+                                "provider": "mock-provider",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertEqual(data["fusion"]["llm_statuses"], ["mock", "ok"])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+
+    def test_review_runner_rejects_shell_string_command(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "shell-string",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "shell-string": {
+                                "type": "command",
+                                "model": "bad",
+                                "command": "python -c print(1)",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "shell-string",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("command provider command must be a non-empty array of strings", result.stderr)
             self.assertNotIn("Traceback", result.stderr)
 
 

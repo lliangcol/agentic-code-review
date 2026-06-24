@@ -15,7 +15,7 @@ Build or refresh a code graph when:
 Use the repository root as the project boundary:
 
 ```text
-<repository-root>/agentic-code-review-skill
+<repository-root>/agentic-code-review
 ```
 
 If `codebase-memory-mcp` does not list the repository root, state that graph discovery is unavailable and fall back to Git, `rg`, and direct file reads.

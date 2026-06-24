@@ -15,7 +15,7 @@
 使用仓库根目录作为项目边界：
 
 ```text
-<repository-root>/agentic-code-review-skill
+<repository-root>/agentic-code-review
 ```
 
 如果 `codebase-memory-mcp` 没有列出该仓库根目录，说明 graph discovery 不可用，并回退到 Git、`rg` 和直接文件读取。

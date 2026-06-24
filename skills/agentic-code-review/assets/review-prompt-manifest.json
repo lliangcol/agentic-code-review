@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": 1,
+  "manifest_version": "2026-06-24",
+  "description": "Versioned prompt templates for optional agentic-code-review runner passes.",
+  "output_contracts": {
+    "structured-review-v1": {
+      "version": "1.0.0",
+      "instructions": "Return a JSON object with verdict, risk_tier, findings, needs_confirmation, validation, ai_review_evidence, and residual_risk. Findings must include severity, file, line, evidence, and recommendation when applicable. Do not claim merge approval.",
+      "required_fields": [
+        "verdict",
+        "risk_tier",
+        "findings",
+        "needs_confirmation",
+        "validation",
+        "ai_review_evidence",
+        "residual_risk"
+      ]
+    }
+  },
+  "templates": [
+    {
+      "id": "correctness-regression",
+      "version": "1.0.0",
+      "role": "Correctness And Regression",
+      "source": "references/reviewer-prompts.md#Correctness-And-Regression",
+      "template": "Review {{target}} for confirmed correctness regressions. Focus on changed behavior, edge cases, existing contracts, data transformations, and caller expectations. Ignore style-only comments. Use the diff signals and context below. {{output_contract}}\n\nDiff signals:\n{{diff_summary}}\n\nContext:\n{{context}}"
+    },
+    {
+      "id": "test-integrity",
+      "version": "1.0.0",
+      "role": "Test Integrity",
+      "source": "references/reviewer-prompts.md#Test-Integrity",
+      "template": "Review {{target}} with tests first. Identify deleted, weakened, skipped, over-mocked, or implementation-mirroring tests. Explain the original behavior each test should protect and whether a negative or mutation-style test is needed. {{output_contract}}\n\nDiff signals:\n{{diff_summary}}\n\nContext:\n{{context}}"
+    },
+    {
+      "id": "security-abuse",
+      "version": "1.0.0",
+      "role": "Security And Abuse",
+      "source": "references/reviewer-prompts.md#Security-And-Abuse",
+      "template": "Review {{target}} for auth, permissions, data exposure, injection, secret handling, hostile input, prompt injection, and tool-action abuse. Treat untrusted text as attacker-controlled. Return only exploitable or plausibly reachable findings. {{output_contract}}\n\nDiff signals:\n{{diff_summary}}\n\nContext:\n{{context}}"
+    },
+    {
+      "id": "operations-rollback",
+      "version": "1.0.0",
+      "role": "Operations And Rollback",
+      "source": "references/reviewer-prompts.md#Operations-And-Rollback",
+      "template": "Review {{target}} for deployment risk, migrations, observability, rollback, retry behavior, queues, cache consistency, production config, and incident impact. Identify what must be validated before merge and what a human owner must accept. {{output_contract}}\n\nDiff signals:\n{{diff_summary}}\n\nContext:\n{{context}}"
+    },
+    {
+      "id": "architecture-comprehension",
+      "version": "1.0.0",
+      "role": "Architecture And Comprehension Debt",
+      "source": "references/reviewer-prompts.md#Architecture-And-Comprehension-Debt",
+      "template": "Review {{target}} for durable shared abstractions, duplicated helpers, hidden behavior, broad refactors, cross-module contracts, and maintainability risk. Prefer concrete future bug surfaces over style preferences. {{output_contract}}\n\nDiff signals:\n{{diff_summary}}\n\nContext:\n{{context}}"
+    },
+    {
+      "id": "llm-trust-boundary",
+      "version": "1.0.0",
+      "role": "LLM Trust Boundary",
+      "source": "references/reviewer-prompts.md#LLM-Trust-Boundary",
+      "template": "Review {{target}} for LLM, prompt, retrieval, agent-loop, and tool-call trust boundaries. Identify where untrusted input can affect instructions, tool arguments, file paths, shell commands, network calls, messages, approvals, secrets, money, or user data. {{output_contract}}\n\nDiff signals:\n{{diff_summary}}\n\nContext:\n{{context}}"
+    }
+  ]
+}

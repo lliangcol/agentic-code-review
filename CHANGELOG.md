@@ -4,6 +4,12 @@ This project follows a lightweight changelog format inspired by Keep a Changelog
 
 ## Unreleased
 
+Added optional provider-abstracted review runner assets and script with prompt manifest versioning, dry-run/mock defaults, command-provider fallback, estimated token/cost reporting, and diff-rule fusion.
+
+Added reviewer adjudication overlays for GitHub metrics collection so AI finding quality fields can be derived from reviewer-comparison records instead of staying fixed at zero.
+
+Strengthened CI and repository validation with explicit Python 3.10/3.11/3.12 coverage, runner smoke checks, legacy repository slug detection, and secret-like value scanning.
+
 Initial project skeleton for `agentic-code-review`.
 
 Added bilingual documentation, GitHub community files, Skill references, adoption templates, and optional `review-fix-loop` integration guidance.
