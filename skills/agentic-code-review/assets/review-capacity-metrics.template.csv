@@ -1,0 +1,2 @@
+period_start,period_end,repository,change_count,zero_review_merges,median_time_to_first_review_hours,median_review_duration_hours,median_files_changed,median_changed_lines,median_test_change_ratio,not_reviewable_count,gate_failure_count,rereview_count,valid_ai_findings,false_positive_ai_findings,reviewer_overlap_count,agent_pr_abandonment_count,notes
+2026-01-01,2026-01-07,example/repository,0,0,0,0,0,0,0,0,0,0,0,0,0,0,replace this row with team metrics

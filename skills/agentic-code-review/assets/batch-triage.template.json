@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "id": "PR-1",
+      "category": "High-risk",
+      "risk_tier": "L3",
+      "reason": "Touches billing, permissions, user data, deletion, production config, or LLM tool-action behavior.",
+      "required_next_evidence": "Provide validation output, owner, rollback notes, and focused review.",
+      "human_owner": ""
+    }
+  ],
+  "human_attention_plan": "Review high-risk and not-reviewable items first; do not treat triage as merge approval."
+}

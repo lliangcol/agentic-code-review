@@ -1,0 +1,70 @@
+name: Validate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate skill structure (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Run local validation
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+
+      - name: Smoke diff measurement helper
+        shell: pwsh
+        run: |
+          function Invoke-JsonSmoke {
+            param(
+              [string]$ScriptPath,
+              [string[]]$Arguments = @()
+            )
+
+            $output = & python $ScriptPath @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "JSON smoke command failed ($LASTEXITCODE): $ScriptPath $($Arguments -join ' ')"
+            }
+            $output | ConvertFrom-Json | Out-Null
+          }
+
+          python -m py_compile `
+            ./skills/agentic-code-review/scripts/measure_diff.py `
+            ./skills/agentic-code-review/scripts/collect_github_metrics.py `
+            ./skills/agentic-code-review/scripts/detect_review_fix_loop.py `
+            ./skills/agentic-code-review/scripts/validate_batch_triage.py `
+            ./skills/agentic-code-review/scripts/validate_hostile_fixtures.py `
+            ./skills/agentic-code-review/scripts/validate_metrics.py `
+            ./skills/agentic-code-review/scripts/validate_reviewer_comparison.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Invoke-JsonSmoke ./skills/agentic-code-review/scripts/measure_diff.py @('--format', 'json', '--no-untracked')
+          Invoke-JsonSmoke ./skills/agentic-code-review/scripts/detect_review_fix_loop.py @('--format', 'json')
+          Invoke-JsonSmoke ./skills/agentic-code-review/scripts/validate_batch_triage.py @('--format', 'json')
+          Invoke-JsonSmoke ./skills/agentic-code-review/scripts/validate_hostile_fixtures.py @('--format', 'json')
+          Invoke-JsonSmoke ./skills/agentic-code-review/scripts/validate_metrics.py @('--format', 'json')
+          Invoke-JsonSmoke ./skills/agentic-code-review/scripts/validate_reviewer_comparison.py @('--format', 'json')
+          python -m unittest discover -s tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installDest = Join-Path $env:RUNNER_TEMP "agentic-code-review-skills"
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-local.ps1 -Destination $installDest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

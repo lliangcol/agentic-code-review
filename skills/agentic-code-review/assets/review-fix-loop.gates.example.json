@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "description": "Optional example gates for agentic-code-review-skill. Copy and adapt in a target repository only when review-fix-loop is already part of that workflow. The Codex validator gate is optional and Codex-specific; use a separate Claude Code smoke install when validating Claude Code packaging.",
+  "gates": [
+    {
+      "name": "skill-structure",
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-skill.ps1",
+      "required": true
+    },
+    {
+      "name": "codex-skill-validator",
+      "command": "pwsh -NoProfile -Command '$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME \".codex\" }; $validator = Join-Path $codexHome \"skills/.system/skill-creator/scripts/quick_validate.py\"; if (Test-Path -LiteralPath $validator) { $env:PYTHONUTF8 = \"1\"; python $validator ./skills/agentic-code-review } else { Write-Host \"Codex skill validator not installed; skipping optional validator.\" }'",
+      "required": false
+    }
+  ],
+  "gate_profiles_to_add_in_target_repositories": [
+    {
+      "profile": "L2 product behavior",
+      "examples": [
+        "unit or integration tests for the changed slice",
+        "lint or typecheck for touched runtime code",
+        "coverage or negative-case checks when tests changed"
+      ]
+    },
+    {
+      "profile": "L3 high blast radius",
+      "examples": [
+        "targeted regression tests for auth, money, deletion, data, queues, or config paths",
+        "security or abuse checks",
+        "rollback or migration verification"
+      ]
+    },
+    {
+      "profile": "LLM tool-action surface",
+      "examples": [
+        "hostile-input test for prompt injection",
+        "tool argument validation test",
+        "human confirmation check before irreversible external actions"
+      ]
+    }
+  ]
+}

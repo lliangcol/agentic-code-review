@@ -1,0 +1,28 @@
+{
+  "scenarios": [
+    {
+      "id": "l1-localized-ready",
+      "prompt": "Use agentic-code-review to review a small localized helper change with validation output.",
+      "expected_verdict": "Ready",
+      "expected_sections": ["Verdict", "Risk Tier", "Reviewability", "CI / Validation"]
+    },
+    {
+      "id": "l3-permission-needs-confirmation",
+      "prompt": "Use agentic-code-review to review a permission-boundary change with tests but no rollback owner.",
+      "expected_verdict": "Needs confirmation",
+      "expected_sections": ["Findings", "Test Review", "Human Merge Notes", "Residual Risk"]
+    },
+    {
+      "id": "mixed-agent-not-reviewable",
+      "prompt": "Use agentic-code-review to review a broad agent-authored diff with generated code, test rewrites, no decision log, and no validation output.",
+      "expected_verdict": "Not reviewable",
+      "expected_sections": ["Required Evidence Missing", "Reviewability"]
+    },
+    {
+      "id": "batch-triage-attention-plan",
+      "prompt": "Use agentic-code-review to triage a batch containing one billing PR, one docs PR, and one generated mixed PR.",
+      "expected_verdict": "Batch Triage",
+      "expected_sections": ["High-risk", "Not reviewable", "Safe-looking", "Human Attention Plan"]
+    }
+  ]
+}

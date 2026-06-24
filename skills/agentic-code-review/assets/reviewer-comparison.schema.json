@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agentic Code Review Reviewer Comparison",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "repository",
+    "revision",
+    "risk_tier",
+    "human_owner",
+    "reviewers",
+    "confirmed_findings",
+    "rejected_findings",
+    "residual_human_judgment"
+  ],
+  "properties": {
+    "repository": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "risk_tier": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3", "L4"]
+    },
+    "human_owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "tool_or_model", "prompt_or_role", "findings", "valid_findings", "false_positive_findings"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "tool_or_model": { "type": "string", "minLength": 1 },
+          "prompt_or_role": { "type": "string", "minLength": 1 },
+          "findings": { "type": "integer", "minimum": 0 },
+          "valid_findings": { "type": "integer", "minimum": 0 },
+          "false_positive_findings": { "type": "integer", "minimum": 0 },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "confirmed_findings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "rejected_findings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "residual_human_judgment": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

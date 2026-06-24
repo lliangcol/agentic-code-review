@@ -1,0 +1,38 @@
+{
+  "thresholds": {
+    "slice_map_files": 20,
+    "slice_map_changed_lines": 800,
+    "not_reviewable_files": 40,
+    "not_reviewable_changed_lines": 1500,
+    "test_change_ratio": 0.5
+  },
+  "test_path_patterns": [
+    "(^|/)(tests?|__tests__|spec)(/|$)",
+    "(\\.|_)(test|spec)\\.[^/]+$",
+    "fixtures?"
+  ],
+  "generated_path_patterns": [
+    "(^|/)(dist|build|generated|vendor)/",
+    "generated",
+    "\\.lock$",
+    "package-lock\\.json",
+    "pnpm-lock\\.yaml",
+    "yarn\\.lock"
+  ],
+  "gate_path_patterns": [
+    "(^|/)\\.github/workflows/",
+    "(^|/)(ci|build|release)(\\.|/|$)",
+    "coverage",
+    "lint",
+    "typecheck",
+    "dependabot",
+    "CODEOWNERS",
+    "gates?"
+  ],
+  "high_risk_path_patterns": [
+    "(^|/)(auth|authorization|permissions?|billing|payments?|money|invoices?)(/|\\.|_|-|$)",
+    "(^|/)(migrations?|schemas?|user[-_]?data|deletions?|secrets?)(/|\\.|_|-|$)",
+    "(^|/)(prompts?|llm|agents?|tools?)(/|\\.|_|-|$)",
+    "(^|/)(production|infra|queues?|cache|retry)(/|\\.|_|-|$)"
+  ]
+}

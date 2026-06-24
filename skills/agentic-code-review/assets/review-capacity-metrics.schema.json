@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agentic Code Review Capacity Metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "period_start",
+    "period_end",
+    "repository",
+    "change_count",
+    "zero_review_merges",
+    "median_time_to_first_review_hours",
+    "median_review_duration_hours",
+    "median_files_changed",
+    "median_changed_lines",
+    "median_test_change_ratio",
+    "not_reviewable_count",
+    "gate_failure_count",
+    "rereview_count",
+    "valid_ai_findings",
+    "false_positive_ai_findings",
+    "reviewer_overlap_count",
+    "agent_pr_abandonment_count",
+    "notes"
+  ],
+  "properties": {
+    "period_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1
+    },
+    "change_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "zero_review_merges": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "median_time_to_first_review_hours": {
+      "type": "number",
+      "minimum": 0
+    },
+    "median_review_duration_hours": {
+      "type": "number",
+      "minimum": 0
+    },
+    "median_files_changed": {
+      "type": "number",
+      "minimum": 0
+    },
+    "median_changed_lines": {
+      "type": "number",
+      "minimum": 0
+    },
+    "median_test_change_ratio": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "not_reviewable_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "gate_failure_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rereview_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "valid_ai_findings": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "false_positive_ai_findings": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reviewer_overlap_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "agent_pr_abandonment_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

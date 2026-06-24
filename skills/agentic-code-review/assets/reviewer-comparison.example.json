@@ -1,0 +1,20 @@
+{
+  "repository": "example/repository",
+  "revision": "example-sha-or-pr",
+  "risk_tier": "L3",
+  "human_owner": "owner@example.invalid",
+  "reviewers": [
+    {
+      "name": "Correctness",
+      "tool_or_model": "example",
+      "prompt_or_role": "Correctness And Regression",
+      "findings": 1,
+      "valid_findings": 1,
+      "false_positive_findings": 0,
+      "notes": "Example calibration record."
+    }
+  ],
+  "confirmed_findings": ["Example confirmed finding with source evidence."],
+  "rejected_findings": [],
+  "residual_human_judgment": ["Human owner accepts residual operational risk."]
+}

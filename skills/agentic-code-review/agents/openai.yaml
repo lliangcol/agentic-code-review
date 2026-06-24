@@ -1,0 +1,6 @@
+interface:
+  display_name: "Agentic Code Review"
+  short_description: "Evidence-gated AI code review workflow"
+  default_prompt: "Use $agentic-code-review to review the current branch with reviewability intake, cheap review-effort signals, risk tiering, test scrutiny, heterogeneous AI review evidence, CI/gate integrity, and human merge ownership."
+policy:
+  allow_implicit_invocation: true
