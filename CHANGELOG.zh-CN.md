@@ -8,6 +8,8 @@
 
 增加 review runner config 和 prompt manifest 校验，覆盖 provider、fallback、template 和 output-contract 检查。
 
+增加 review runner provider failure summaries，使 timeout、retry 和 fallback 降级需要确认。
+
 为 GitHub metrics collection 增加 reviewer adjudication overlay，使 AI finding quality 字段可从 reviewer-comparison 记录推导，而不是固定为零。
 
 加强 CI 和仓库校验，增加明确的 Python 3.10/3.11/3.12 覆盖、runner smoke checks、旧仓库 slug 检测和 secret-like value 扫描。

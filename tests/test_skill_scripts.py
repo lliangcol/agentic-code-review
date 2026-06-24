@@ -1154,7 +1154,80 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(review_pass["status"], "mock")
             self.assertEqual(review_pass["attempts"][0]["provider"], "broken-command")
             self.assertEqual(review_pass["attempts"][0]["status"], "failed")
+            self.assertIn("broken-command attempt 1 failed", review_pass["attempt_failures"])
+            self.assertIn("correctness: broken-command attempt 1 failed", data["fusion"]["provider_failures"])
             self.assertEqual(review_pass["structured_output"]["verdict"], "Needs confirmation")
+
+    def test_review_runner_successful_fallback_needs_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            ready_output = {
+                "verdict": "Ready",
+                "risk_tier": "L1",
+                "findings": [],
+                "needs_confirmation": [],
+                "validation": [],
+                "ai_review_evidence": {"reviewer": "ok-command"},
+                "residual_risk": [],
+            }
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "broken-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "broken-command": {
+                                "type": "command",
+                                "model": "broken",
+                                "command": [sys.executable, "-c", "import sys; sys.exit(3)"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "ok-command",
+                            },
+                            "ok-command": {
+                                "type": "command",
+                                "model": "ok",
+                                "command": [sys.executable, "-c", f"import json; print(json.dumps({ready_output!r}))"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            },
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "broken-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertEqual(review_pass["provider"], "ok-command")
+            self.assertEqual(review_pass["status"], "ok")
+            self.assertIn("broken-command attempt 1 failed", review_pass["attempt_failures"])
+            self.assertEqual(data["fusion"]["provider_failures"], ["correctness: broken-command attempt 1 failed"])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
 
     def test_review_runner_missing_command_falls_back_without_traceback(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

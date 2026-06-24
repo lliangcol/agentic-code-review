@@ -144,6 +144,7 @@ The runner provides:
 - Multi-pass prompt orchestration from `assets/review-prompt-manifest.json`.
 - Prompt versioning through template IDs and versions.
 - Timeout, retry, and fallback provider behavior.
+- Provider attempt failure summaries for timeout, retry, and fallback review.
 - Estimated token and cost accounting.
 - Structured JSON reports with diff-rule fusion from `measure_diff.py`.
 - Prompt omission by default; pass `--include-prompts` only when you intentionally want rendered prompts in the report.

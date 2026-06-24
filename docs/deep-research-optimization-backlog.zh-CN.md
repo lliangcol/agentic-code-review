@@ -52,7 +52,7 @@
 | P1-02 | 强制校验 command provider 的结构化 review 输出契约。 | runner 现在会在 fusion 前校验结构化输出必要字段和顶层字段类型。 | 第 2 轮完成。 | 非法 reviewer 输出应作为需要确认的证据，而不是干净通过。 |
 | P1-03 | 加强 prompt template 版本策略。 | Templates 已经有 ID 和 version；变更策略与 schema 检查只部分显式。 | 未完成。 | 增加校验和文档，让 prompt 变更可审计、可回滚。 |
 | P1-04 | 保持 multi-provider 行为最小但明确。 | `mock` 和 `command` providers 可以覆盖多种外部工具且不引入 SDK 依赖。原生 OpenAI/Anthropic SDK providers 是 `unspecified`。 | 作为设计决策保持打开。 | 暂不加 SDK providers，以降低依赖重量；把 command-provider contract 记录为受支持扩展点。 |
-| P1-05 | 改善超时、重试、fallback 和失败可观测性。 | attempts 已记录 status、elapsed time、stderr 片段、fallback 和 timeout 结果。Backoff 策略是 `unspecified`。 | 未完成。 | 当前保留立即重试；先补更清晰的失败摘要，再决定是否加可配置 backoff。 |
+| P1-05 | 改善超时、重试、fallback 和失败可观测性。 | Runner report 现在包含 pass 级 `attempt_failures` 和 fusion 级 `provider_failures`；provider 降级会强制 `Needs confirmation`。Backoff 策略是 `unspecified`。 | 第 4 轮完成 reporting 和 fusion。 | 当前保留立即重试；先补更清晰的失败摘要，再决定是否加可配置 backoff。 |
 | P1-06 | 保护规则检查与 LLM 融合语义。 | Fusion 会组合 `measure_diff.py` warnings 与结构化 reviewer 输出。非法结构化输出还不是一等 fusion 信号。 | 未完成。 | 增加测试，确保格式错误或字段不完整的 LLM 输出不能产生 `Ready`。 |
 | P1-07 | 保持 metrics calibration 闭环。 | Adjudication overlays 已经可以填充 AI finding quality 字段。 | 部分完成。 | 下一步应在导入前按 reviewer-comparison contract 校验 overlay records。 |
 | P1-08 | 维护 CI 与安全门禁完整性。 | CI 已 pin、跨平台，并扫描 secret-like 文本；没有 CodeQL、coverage gate 或 PowerShell analyzer。 | 未完成。 | 优先低依赖检查；重型 analyzers 在项目接受额外 setup 成本前保持 `unspecified`。 |
@@ -137,6 +137,28 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 文档更新：在本 backlog 中标记 P1-01 完成，更新 README 和 changelog。
 
 兼容性影响：只新增脚本和 CI 检查。现有 runner config shape、command-provider 行为、mock defaults、Skill 打包和 runtime 支持保持不变。
+
+验证步骤：
+
+```powershell
+python -m unittest tests.test_skill_scripts.ReviewRunnerTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+```
+
+## 第 4 轮执行记录
+
+当前问题：provider attempts 已包含失败细节，但用户必须逐条检查 attempts 才能看出 timeout、retry 或 fallback 降级。成功 fallback 也可能掩盖 primary provider 曾经失败。
+
+拟议方案：新增 pass 级 `attempt_failures` 和 fusion 级 `provider_failures`，并让任何 provider attempt failure 都把融合 verdict 保持为 `Needs confirmation`。
+
+代码或配置改动：更新 `run_review_passes.py` 的 report 和 fusion 输出；增加 mock fallback 与 successful command fallback 测试；更新 README、changelog 和本 backlog。
+
+测试：运行聚焦的 review-runner 测试、全量单元测试和仓库校验。
+
+文档更新：在本 backlog 中标记 P1-05 reporting 和 fusion 完成，更新 README 和 changelog。
+
+兼容性影响：新增 report 字段，并在 fallback 前曾发生 provider attempt failure 时使用更保守的 fusion verdict。CLI、config shape、provider 执行、retry 次数和 fallback 机制保持不变。
 
 验证步骤：
 

@@ -149,6 +149,7 @@ Runner 提供：
 - 从 `assets/review-prompt-manifest.json` 进行多 pass prompt 编排。
 - 通过 template ID 和 version 管理 prompt 版本。
 - 超时、重试和 fallback provider 行为。
+- Provider attempt failure summaries，用于复核 timeout、retry 和 fallback。
 - 估算 token 和成本统计。
 - 融合 `measure_diff.py` 规则信号的结构化 JSON 报告。
 - 默认不记录渲染后的 prompt；只有明确传入 `--include-prompts` 时才写入报告。

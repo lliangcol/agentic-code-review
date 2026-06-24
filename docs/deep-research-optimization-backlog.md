@@ -52,7 +52,7 @@ Guardrails:
 | P1-02 | Enforce structured review output contracts from command providers. | The runner now validates structured output required fields and top-level field types before fusion. | Complete in round 2. | Treat invalid reviewer output as non-blocking evidence that needs confirmation, not as a clean pass. |
 | P1-03 | Strengthen prompt template versioning policy. | Templates have IDs and versions; change policy and schema checks are only partially explicit. | Open. | Add validation and documentation so prompt changes are auditable and rollback-friendly. |
 | P1-04 | Keep multi-provider behavior minimal but explicit. | `mock` and `command` providers support many external tools without SDK dependencies. Native OpenAI/Anthropic SDK providers are `unspecified`. | Open as design decision. | Avoid SDK providers for now to keep dependency weight low; document command-provider contract as the supported extension point. |
-| P1-05 | Improve timeout, retry, fallback, and failure observability. | Attempts record status, elapsed time, stderr snippets, fallback, and timeout outcomes. Backoff policy is `unspecified`. | Open. | Keep immediate retries for now; add clearer failure summaries before adding configurable backoff. |
+| P1-05 | Improve timeout, retry, fallback, and failure observability. | Runner reports now include pass-level `attempt_failures` and fusion-level `provider_failures`; provider degradation forces `Needs confirmation`. Backoff policy is `unspecified`. | Complete in round 4 for reporting and fusion. | Keep immediate retries for now; add clearer failure summaries before adding configurable backoff. |
 | P1-06 | Protect rule-check plus LLM fusion semantics. | Fusion combines `measure_diff.py` warnings with structured reviewer outputs. Invalid structured output is not yet a first-class fusion signal. | Open. | Add tests that malformed or incomplete LLM output cannot produce `Ready`. |
 | P1-07 | Keep metrics calibration closed-loop. | Adjudication overlays now populate AI finding quality fields. | Partially complete. | Next work should validate overlay records against the reviewer-comparison contract before import. |
 | P1-08 | Maintain CI and security gate integrity. | CI is pinned, cross-platform, and scans secret-like text; no CodeQL, coverage gate, or PowerShell analyzer is present. | Open. | Prefer low-dependency checks first; heavier analyzers remain `unspecified` until the project accepts extra setup cost. |
@@ -137,6 +137,28 @@ Tests: run the focused review-runner tests, full unit suite, and repository vali
 Documentation update: mark P1-01 complete in this backlog, update README, and update the changelog.
 
 Compatibility impact: additive script and CI check only. Existing runner config shape, command-provider behavior, mock defaults, Skill packaging, and runtime support remain unchanged.
+
+Validation steps:
+
+```powershell
+python -m unittest tests.test_skill_scripts.ReviewRunnerTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+```
+
+## Round 4 Execution Record
+
+Current problem: provider attempts already contained failure details, but users had to inspect every attempt to see timeout, retry, or fallback degradation. A successful fallback could otherwise hide that the primary provider failed.
+
+Proposed solution: add pass-level `attempt_failures` and fusion-level `provider_failures`, and make any provider attempt failure keep the fused verdict at `Needs confirmation`.
+
+Code or configuration changes: update `run_review_passes.py` report and fusion output; add tests for mock fallback and successful command fallback; update README, changelog, and this backlog.
+
+Tests: run the focused review-runner tests, full unit suite, and repository validation.
+
+Documentation update: mark P1-05 reporting and fusion complete in this backlog, update README, and update the changelog.
+
+Compatibility impact: additive report fields plus a more conservative fusion verdict when a provider attempt fails before fallback. CLI, config shape, provider execution, retry counts, and fallback mechanics remain unchanged.
 
 Validation steps:
 

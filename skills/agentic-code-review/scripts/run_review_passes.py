@@ -358,6 +358,22 @@ def parse_and_validate_structured_output(
     return structured, validate_structured_output(structured, contract, contract_id)
 
 
+def summarize_attempt_failures(attempts: list[dict[str, object]]) -> list[str]:
+    failures: list[str] = []
+    for attempt in attempts:
+        status = str(attempt.get("status", ""))
+        if status not in {"failed", "timeout"}:
+            continue
+        provider = str(attempt.get("provider", "unknown-provider"))
+        attempt_number = attempt.get("attempt", "?")
+        message = f"{provider} attempt {attempt_number} {status}"
+        stderr = str(attempt.get("stderr", "")).strip()
+        if stderr:
+            message = f"{message}: {stderr}"
+        failures.append(message)
+    return failures
+
+
 def run_diff_measurement(config: dict[str, Any], no_diff: bool) -> dict[str, Any]:
     run_config = as_object(config.get("run", {}), "run")
     if no_diff or run_config.get("measure_diff", True) is False:
@@ -408,12 +424,17 @@ def fuse_review(diff: dict[str, Any], pass_results: list[dict[str, Any]]) -> dic
         for item in pass_results
         for error in item.get("structured_output_errors", [])
     ]
+    provider_failures = [
+        f"{item.get('id')}: {failure}"
+        for item in pass_results
+        for failure in item.get("attempt_failures", [])
+    ]
 
     if "large-diff-not-reviewable-threshold" in warnings:
         verdict = "Not reviewable"
     elif blocking_findings:
         verdict = "Not ready"
-    elif warnings or output_contract_errors or statuses & {"mock", "dry_run", "failed"}:
+    elif warnings or output_contract_errors or provider_failures or statuses & {"mock", "dry_run", "failed"}:
         verdict = "Needs confirmation"
     else:
         verdict = "Ready"
@@ -431,6 +452,7 @@ def fuse_review(diff: dict[str, Any], pass_results: list[dict[str, Any]]) -> dic
         "rule_warnings": warnings,
         "llm_statuses": sorted(statuses),
         "output_contract_errors": output_contract_errors,
+        "provider_failures": provider_failures,
         "explanation": "Fusion combines measure_diff.py rule signals with structured reviewer outputs; human owner still decides merge readiness.",
     }
 
@@ -472,6 +494,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         )
         result = execute_provider(provider_name, providers, prompt, pass_id, template, args.dry_run, max_output_chars)
         structured_output, structured_output_errors = parse_and_validate_structured_output(result.output, result.status, contract, contract_id)
+        attempt_failures = summarize_attempt_failures(result.attempts)
         pass_report: dict[str, Any] = {
             "id": pass_id,
             "template_id": template_id,
@@ -485,6 +508,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "estimated_cost_usd": result.estimated_cost_usd,
             "structured_output": structured_output,
             "structured_output_errors": structured_output_errors,
+            "attempt_failures": attempt_failures,
         }
         if result.output and pass_report["structured_output"] is None:
             pass_report["raw_output"] = result.output
@@ -540,6 +564,11 @@ def print_markdown(report: dict[str, Any]) -> None:
         print("## Output Contract Warnings")
         for error in fusion["output_contract_errors"]:
             print(f"- {error}")
+    if fusion["provider_failures"]:
+        print()
+        print("## Provider Failures")
+        for failure in fusion["provider_failures"]:
+            print(f"- {failure}")
     print()
     print("## Passes")
     for item in report["passes"]:
