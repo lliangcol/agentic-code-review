@@ -406,10 +406,8 @@ $allTextFiles = foreach ($relative in $repositoryFiles) {
     }
 
     $normalizedRelativePath = $relative -replace '\\', '/'
-    try {
-        $file = Get-Item -LiteralPath $path -ErrorAction Stop
-    }
-    catch [System.Management.Automation.ItemNotFoundException] {
+    $file = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+    if ($null -eq $file) {
         Write-Host "Warning: expected text file not found: $normalizedRelativePath"
         continue
     }
