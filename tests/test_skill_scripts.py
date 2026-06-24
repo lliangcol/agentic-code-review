@@ -1775,6 +1775,26 @@ class RepositoryWorkflowTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("Local private path leaked", result.stderr + result.stdout)
 
+    def test_check_skill_fails_when_workflow_action_is_not_sha_pinned(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "copy"
+            copy_current_worktree(root)
+            workflow = root / ".github" / "workflows" / "validate.yml"
+            text = workflow.read_text(encoding="utf-8")
+            workflow.write_text(
+                text.replace(
+                    "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5",
+                    "actions/setup-python@v5",
+                ),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            result = run(["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(root / "scripts" / "check-skill.ps1")], root, check=False)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Validate workflow action must pin full commit SHA: actions/setup-python@v5", result.stderr + result.stdout)
+
 
 class SchemaValidatorConsistencyTests(unittest.TestCase):
     """Guard against drift between the JSON Schemas and the hand-rolled validators."""

@@ -55,7 +55,7 @@ Guardrails:
 | P1-05 | Improve timeout, retry, fallback, and failure observability. | Runner reports now include pass-level `attempt_failures` and fusion-level `provider_failures`; provider degradation forces `Needs confirmation`. Backoff policy is `unspecified`. | Complete in round 4 for reporting and fusion. | Keep immediate retries for now; add clearer failure summaries before adding configurable backoff. |
 | P1-06 | Protect rule-check plus LLM fusion semantics. | Fusion now treats structured output errors and provider failures as `Needs confirmation` signals. | Complete in rounds 2 and 4. | Add tests that malformed or incomplete LLM output cannot produce `Ready`. |
 | P1-07 | Keep metrics calibration closed-loop. | Adjudication overlays now populate AI finding quality fields and are validated against the reviewer-comparison contract before import. | Complete in round 5. | Validate overlay records before calculating team metrics so calibration data cannot silently drift. |
-| P1-08 | Maintain CI and security gate integrity. | CI is pinned, cross-platform, and scans secret-like text; no CodeQL, coverage gate, or PowerShell analyzer is present. | Open. | Prefer low-dependency checks first; heavier analyzers remain `unspecified` until the project accepts extra setup cost. |
+| P1-08 | Maintain CI and security gate integrity. | Local validation now enforces Validate workflow permission, credential, setup-python, matrix-version, and full-SHA action pinning guards. CodeQL, coverage gate, and PowerShell analyzer remain `unspecified`. | Partially complete in round 6. | Prefer low-dependency checks first; heavier analyzers remain `unspecified` until the project accepts extra setup cost. |
 | P1-09 | Document external GitHub metadata drift handling. | Local files no longer expose the old repository slug; GitHub About metadata is not in local code. | Open external task. | Track as manual release checklist work because it cannot be changed by local code edits. |
 
 ## P2 Tasks
@@ -186,6 +186,28 @@ Validation steps:
 
 ```powershell
 python -m unittest tests.test_skill_scripts.MetricsCollectionTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+```
+
+## Round 6 Execution Record
+
+Current problem: the Validate workflow already used low-risk settings, but those settings were not all enforced by the local repository gate. Future edits could silently weaken permissions, action pinning, or Python setup.
+
+Proposed solution: add local `check-skill.ps1` guards for `contents: read`, disabled checkout credential persistence, explicit `actions/setup-python`, matrix-driven Python version selection, and full commit SHA pinning for every `uses:` action.
+
+Code or configuration changes: update `check-skill.ps1`; add a regression test that rewrites `actions/setup-python` to a tag and expects validation failure; update changelog and this backlog.
+
+Tests: run the focused repository workflow test, full unit suite, and repository validation.
+
+Documentation update: mark the low-dependency portion of P1-08 complete in this backlog and update the changelog.
+
+Compatibility impact: local validation is stricter. Runtime behavior, install paths, runner behavior, and workflow behavior are unchanged when the workflow keeps the existing guardrails.
+
+Validation steps:
+
+```powershell
+python -m unittest tests.test_skill_scripts.RepositoryWorkflowTests
 python -m unittest discover -s tests
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 ```

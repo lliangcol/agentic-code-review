@@ -12,6 +12,8 @@ Added review runner provider failure summaries so timeout, retry, and fallback d
 
 Validated GitHub metrics adjudication overlays against the reviewer-comparison contract before calculating AI finding quality fields.
 
+Added local validation guards for the Validate workflow permissions, credential persistence, Python setup, and full-SHA action pinning.
+
 Added reviewer adjudication overlays for GitHub metrics collection so AI finding quality fields can be derived from reviewer-comparison records instead of staying fixed at zero.
 
 Strengthened CI and repository validation with explicit Python 3.10/3.11/3.12 coverage, runner smoke checks, legacy repository slug detection, and secret-like value scanning.

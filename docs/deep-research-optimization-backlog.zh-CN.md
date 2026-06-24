@@ -55,7 +55,7 @@
 | P1-05 | 改善超时、重试、fallback 和失败可观测性。 | Runner report 现在包含 pass 级 `attempt_failures` 和 fusion 级 `provider_failures`；provider 降级会强制 `Needs confirmation`。Backoff 策略是 `unspecified`。 | 第 4 轮完成 reporting 和 fusion。 | 当前保留立即重试；先补更清晰的失败摘要，再决定是否加可配置 backoff。 |
 | P1-06 | 保护规则检查与 LLM 融合语义。 | Fusion 现在会把结构化输出错误和 provider failures 作为 `Needs confirmation` 信号。 | 第 2 轮和第 4 轮完成。 | 增加测试，确保格式错误或字段不完整的 LLM 输出不能产生 `Ready`。 |
 | P1-07 | 保持 metrics calibration 闭环。 | Adjudication overlays 已经可以填充 AI finding quality 字段，并会在导入前按 reviewer-comparison contract 校验。 | 第 5 轮完成。 | 计算团队 metrics 前先校验 overlay records，避免校准数据静默漂移。 |
-| P1-08 | 维护 CI 与安全门禁完整性。 | CI 已 pin、跨平台，并扫描 secret-like 文本；没有 CodeQL、coverage gate 或 PowerShell analyzer。 | 未完成。 | 优先低依赖检查；重型 analyzers 在项目接受额外 setup 成本前保持 `unspecified`。 |
+| P1-08 | 维护 CI 与安全门禁完整性。 | 本地校验现在强制 Validate workflow 的 permission、credential、setup-python、matrix-version 和完整 SHA action pinning 护栏。CodeQL、coverage gate 和 PowerShell analyzer 仍是 `unspecified`。 | 第 6 轮部分完成。 | 优先低依赖检查；重型 analyzers 在项目接受额外 setup 成本前保持 `unspecified`。 |
 | P1-09 | 记录外部 GitHub metadata 漂移处理。 | 本地文件已不暴露旧仓库 slug；GitHub About metadata 不在本地代码中。 | 外部任务未完成。 | 作为手动 release checklist 事项跟踪，因为它不能靠本地代码编辑完成。 |
 
 ## P2 任务
@@ -186,6 +186,28 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 
 ```powershell
 python -m unittest tests.test_skill_scripts.MetricsCollectionTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+```
+
+## 第 6 轮执行记录
+
+当前问题：Validate workflow 已经使用低风险设置，但这些设置并未全部由本地仓库门禁强制保护。后续编辑可能静默削弱 permissions、action pinning 或 Python setup。
+
+拟议方案：在本地 `check-skill.ps1` 中增加护栏，检查 `contents: read`、禁用 checkout credential persistence、显式 `actions/setup-python`、基于 matrix 的 Python version selection，以及每个 `uses:` action 都使用完整 commit SHA pin。
+
+代码或配置改动：更新 `check-skill.ps1`；增加一个把 `actions/setup-python` 改成 tag 并期望校验失败的回归测试；更新 changelog 和本 backlog。
+
+测试：运行聚焦的 repository workflow 测试、全量单元测试和仓库校验。
+
+文档更新：在本 backlog 中标记 P1-08 的低依赖部分完成，并更新 changelog。
+
+兼容性影响：本地校验更严格。只要 workflow 保持现有护栏，运行时行为、安装路径、runner 行为和 workflow 行为都不变。
+
+验证步骤：
+
+```powershell
+python -m unittest tests.test_skill_scripts.RepositoryWorkflowTests
 python -m unittest discover -s tests
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 ```

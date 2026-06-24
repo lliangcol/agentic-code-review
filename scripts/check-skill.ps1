@@ -322,6 +322,29 @@ foreach ($marker in $requiredRuntimeSupportMarkers) {
     }
 }
 
+$validateWorkflowRelative = '.github/workflows/validate.yml'
+$validateWorkflowPath = Join-Path $repo $validateWorkflowRelative
+$validateWorkflowText = Get-Content -LiteralPath $validateWorkflowPath -Raw -Encoding UTF8
+$validateWorkflowMarkers = @(
+    [pscustomobject]@{ Name = 'contents read permission'; Pattern = '(?m)^permissions:\s*\r?\n\s+contents:\s*read\s*$' },
+    [pscustomobject]@{ Name = 'checkout credential persistence disabled'; Pattern = 'persist-credentials:\s*false' },
+    [pscustomobject]@{ Name = 'explicit setup-python action'; Pattern = 'actions/setup-python@' },
+    [pscustomobject]@{ Name = 'matrix Python version selection'; Pattern = 'python-version:\s*\$\{\{\s*matrix\.python-version\s*\}\}' }
+)
+
+foreach ($marker in $validateWorkflowMarkers) {
+    if ($validateWorkflowText -notmatch $marker.Pattern) {
+        Fail "Validate workflow missing guard: $($marker.Name)"
+    }
+}
+
+foreach ($match in [regex]::Matches($validateWorkflowText, '(?m)^\s*uses:\s*(?<Action>[^\s#]+)')) {
+    $action = $match.Groups['Action'].Value
+    if ($action -notmatch '@[0-9a-fA-F]{40}$') {
+        Fail "Validate workflow action must pin full commit SHA: $action"
+    }
+}
+
 $trackedSkillFiles = @($repositoryFiles | Where-Object { $_ -like 'skills/agentic-code-review/*' })
 $skillPackageFiles = if ($trackedSkillFiles.Count -gt 0) {
     $trackedSkillFiles
