@@ -13,6 +13,12 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from validate_reviewer_comparison import validate_record as validate_reviewer_comparison_record
+
 
 HEADER = [
     "period_start",
@@ -120,16 +126,31 @@ def extract_prs(data: Any) -> list[dict[str, Any]]:
     raise SystemExit("Input must be a JSON array or an object with pull_requests/prs/items")
 
 
-def extract_adjudication_records(data: Any) -> list[dict[str, Any]]:
+def extract_adjudication_records(data: Any) -> list[Any]:
     if isinstance(data, list):
-        return [item for item in data if isinstance(item, dict)]
+        return data
     if isinstance(data, dict):
         for key in ["reviewer_comparisons", "adjudications", "items"]:
             value = data.get(key)
             if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
+                return value
         return [data]
     raise ValueError("adjudication input must be a JSON object, an array, or an object with reviewer_comparisons/adjudications/items")
+
+
+def validate_adjudication_records(records: list[Any], source: str) -> list[dict[str, Any]]:
+    valid_records: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for index, record in enumerate(records):
+        record_errors = validate_reviewer_comparison_record(record)
+        if record_errors:
+            errors.extend(f"{source}[{index}]: {error}" for error in record_errors)
+        elif isinstance(record, dict):
+            valid_records.append(record)
+
+    if errors:
+        raise ValueError("adjudication validation failed: " + "; ".join(errors))
+    return valid_records
 
 
 def count_reviewer_findings(record: dict[str, Any], field: str) -> int:
@@ -289,7 +310,8 @@ def main() -> int:
         prs = extract_prs(load_json(Path(args.input_json)))
         adjudications: list[dict[str, Any]] = []
         for adjudication_path in args.adjudication_json:
-            adjudications.extend(extract_adjudication_records(load_json(Path(adjudication_path))))
+            records = extract_adjudication_records(load_json(Path(adjudication_path)))
+            adjudications.extend(validate_adjudication_records(records, str(adjudication_path)))
         row = collect(prs, args.repository, args.period_start, args.period_end, adjudications)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)

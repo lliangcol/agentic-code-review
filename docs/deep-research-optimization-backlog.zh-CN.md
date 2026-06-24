@@ -53,8 +53,8 @@
 | P1-03 | 加强 prompt template 版本策略。 | Templates 已经有 ID 和 version；变更策略与 schema 检查只部分显式。 | 未完成。 | 增加校验和文档，让 prompt 变更可审计、可回滚。 |
 | P1-04 | 保持 multi-provider 行为最小但明确。 | `mock` 和 `command` providers 可以覆盖多种外部工具且不引入 SDK 依赖。原生 OpenAI/Anthropic SDK providers 是 `unspecified`。 | 作为设计决策保持打开。 | 暂不加 SDK providers，以降低依赖重量；把 command-provider contract 记录为受支持扩展点。 |
 | P1-05 | 改善超时、重试、fallback 和失败可观测性。 | Runner report 现在包含 pass 级 `attempt_failures` 和 fusion 级 `provider_failures`；provider 降级会强制 `Needs confirmation`。Backoff 策略是 `unspecified`。 | 第 4 轮完成 reporting 和 fusion。 | 当前保留立即重试；先补更清晰的失败摘要，再决定是否加可配置 backoff。 |
-| P1-06 | 保护规则检查与 LLM 融合语义。 | Fusion 会组合 `measure_diff.py` warnings 与结构化 reviewer 输出。非法结构化输出还不是一等 fusion 信号。 | 未完成。 | 增加测试，确保格式错误或字段不完整的 LLM 输出不能产生 `Ready`。 |
-| P1-07 | 保持 metrics calibration 闭环。 | Adjudication overlays 已经可以填充 AI finding quality 字段。 | 部分完成。 | 下一步应在导入前按 reviewer-comparison contract 校验 overlay records。 |
+| P1-06 | 保护规则检查与 LLM 融合语义。 | Fusion 现在会把结构化输出错误和 provider failures 作为 `Needs confirmation` 信号。 | 第 2 轮和第 4 轮完成。 | 增加测试，确保格式错误或字段不完整的 LLM 输出不能产生 `Ready`。 |
+| P1-07 | 保持 metrics calibration 闭环。 | Adjudication overlays 已经可以填充 AI finding quality 字段，并会在导入前按 reviewer-comparison contract 校验。 | 第 5 轮完成。 | 计算团队 metrics 前先校验 overlay records，避免校准数据静默漂移。 |
 | P1-08 | 维护 CI 与安全门禁完整性。 | CI 已 pin、跨平台，并扫描 secret-like 文本；没有 CodeQL、coverage gate 或 PowerShell analyzer。 | 未完成。 | 优先低依赖检查；重型 analyzers 在项目接受额外 setup 成本前保持 `unspecified`。 |
 | P1-09 | 记录外部 GitHub metadata 漂移处理。 | 本地文件已不暴露旧仓库 slug；GitHub About metadata 不在本地代码中。 | 外部任务未完成。 | 作为手动 release checklist 事项跟踪，因为它不能靠本地代码编辑完成。 |
 
@@ -164,6 +164,28 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 
 ```powershell
 python -m unittest tests.test_skill_scripts.ReviewRunnerTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+```
+
+## 第 5 轮执行记录
+
+当前问题：GitHub metrics adjudication overlays 可以在只有局部类型检查的情况下用于计算 AI finding quality 字段，仍可能偏离 reviewer-comparison contract。
+
+拟议方案：在 `collect_github_metrics.py` 导入 adjudication overlay records 前复用现有 reviewer-comparison validator。
+
+代码或配置改动：更新 `collect_github_metrics.py`，校验抽取出的 overlay records；增加非法 reviewer counts 的失败路径测试；更新 README、changelog 和本 backlog。
+
+测试：运行聚焦的 metrics collection 测试、全量单元测试和仓库校验。
+
+文档更新：在本 backlog 中标记 P1-07 完成，README 澄清 overlay validation，并更新 changelog。
+
+兼容性影响：合法 overlay 文件不变。非法 overlays 现在会更早失败，并给出清晰 validation error，而不是产出派生 metrics。
+
+验证步骤：
+
+```powershell
+python -m unittest tests.test_skill_scripts.MetricsCollectionTests
 python -m unittest discover -s tests
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 ```

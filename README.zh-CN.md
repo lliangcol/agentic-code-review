@@ -135,6 +135,8 @@ python .\skills\agentic-code-review\scripts\collect_github_metrics.py .\prs.json
   --adjudication-json .\reviewer-comparison.json
 ```
 
+计算 metrics 前会先按 reviewer-comparison contract 校验 adjudication overlays。
+
 ## 可选 Review Runner
 
 仓库包含一个仅依赖标准库的可选 runner，适合团队在不绑定某个 SDK 或 provider 的前提下，建立本地、可审计的 LLM/agent 调用链。默认配置使用 `mock` providers，因此可安全用于 CI 和 smoke tests。

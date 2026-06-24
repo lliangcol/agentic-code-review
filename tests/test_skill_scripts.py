@@ -719,6 +719,61 @@ class MetricsCollectionTests(unittest.TestCase):
             self.assertEqual(data["reviewer_overlap_count"], 1)
             self.assertIn("reviewer adjudication record", data["notes"])
 
+    def test_collect_github_metrics_rejects_invalid_adjudication_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            adjudication = Path(temp) / "reviewers.json"
+            payload.write_text("[]", encoding="utf-8")
+            adjudication.write_text(
+                json.dumps(
+                    {
+                        "repository": "owner/repo",
+                        "revision": "PR-1",
+                        "risk_tier": "L2",
+                        "human_owner": "owner@example.invalid",
+                        "reviewers": [
+                            {
+                                "name": "Correctness",
+                                "tool_or_model": "model-a",
+                                "prompt_or_role": "Correctness",
+                                "findings": 1,
+                                "valid_findings": 1,
+                                "false_positive_findings": 1,
+                            }
+                        ],
+                        "confirmed_findings": [],
+                        "rejected_findings": [],
+                        "residual_human_judgment": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--adjudication-json",
+                    str(adjudication),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("adjudication validation failed", result.stderr)
+            self.assertIn("valid_findings + false_positive_findings must not exceed findings", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
     def test_collect_github_metrics_rereviews_validate(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             payload = Path(temp) / "prs.json"

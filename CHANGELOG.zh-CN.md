@@ -10,6 +10,8 @@
 
 增加 review runner provider failure summaries，使 timeout、retry 和 fallback 降级需要确认。
 
+在计算 AI finding quality 字段前，按 reviewer-comparison contract 校验 GitHub metrics adjudication overlays。
+
 为 GitHub metrics collection 增加 reviewer adjudication overlay，使 AI finding quality 字段可从 reviewer-comparison 记录推导，而不是固定为零。
 
 加强 CI 和仓库校验，增加明确的 Python 3.10/3.11/3.12 覆盖、runner smoke checks、旧仓库 slug 检测和 secret-like value 扫描。

@@ -130,6 +130,8 @@ python .\skills\agentic-code-review\scripts\collect_github_metrics.py .\prs.json
   --adjudication-json .\reviewer-comparison.json
 ```
 
+Adjudication overlays are validated against the reviewer-comparison contract before metrics are calculated.
+
 ## Optional Review Runner
 
 The repository includes an optional standard-library runner for teams that want a local, auditable LLM/agent call chain without binding this Skill to one SDK or provider. The default config uses `mock` providers, so it is safe for CI and smoke tests.

@@ -53,8 +53,8 @@ Guardrails:
 | P1-03 | Strengthen prompt template versioning policy. | Templates have IDs and versions; change policy and schema checks are only partially explicit. | Open. | Add validation and documentation so prompt changes are auditable and rollback-friendly. |
 | P1-04 | Keep multi-provider behavior minimal but explicit. | `mock` and `command` providers support many external tools without SDK dependencies. Native OpenAI/Anthropic SDK providers are `unspecified`. | Open as design decision. | Avoid SDK providers for now to keep dependency weight low; document command-provider contract as the supported extension point. |
 | P1-05 | Improve timeout, retry, fallback, and failure observability. | Runner reports now include pass-level `attempt_failures` and fusion-level `provider_failures`; provider degradation forces `Needs confirmation`. Backoff policy is `unspecified`. | Complete in round 4 for reporting and fusion. | Keep immediate retries for now; add clearer failure summaries before adding configurable backoff. |
-| P1-06 | Protect rule-check plus LLM fusion semantics. | Fusion combines `measure_diff.py` warnings with structured reviewer outputs. Invalid structured output is not yet a first-class fusion signal. | Open. | Add tests that malformed or incomplete LLM output cannot produce `Ready`. |
-| P1-07 | Keep metrics calibration closed-loop. | Adjudication overlays now populate AI finding quality fields. | Partially complete. | Next work should validate overlay records against the reviewer-comparison contract before import. |
+| P1-06 | Protect rule-check plus LLM fusion semantics. | Fusion now treats structured output errors and provider failures as `Needs confirmation` signals. | Complete in rounds 2 and 4. | Add tests that malformed or incomplete LLM output cannot produce `Ready`. |
+| P1-07 | Keep metrics calibration closed-loop. | Adjudication overlays now populate AI finding quality fields and are validated against the reviewer-comparison contract before import. | Complete in round 5. | Validate overlay records before calculating team metrics so calibration data cannot silently drift. |
 | P1-08 | Maintain CI and security gate integrity. | CI is pinned, cross-platform, and scans secret-like text; no CodeQL, coverage gate, or PowerShell analyzer is present. | Open. | Prefer low-dependency checks first; heavier analyzers remain `unspecified` until the project accepts extra setup cost. |
 | P1-09 | Document external GitHub metadata drift handling. | Local files no longer expose the old repository slug; GitHub About metadata is not in local code. | Open external task. | Track as manual release checklist work because it cannot be changed by local code edits. |
 
@@ -164,6 +164,28 @@ Validation steps:
 
 ```powershell
 python -m unittest tests.test_skill_scripts.ReviewRunnerTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
+```
+
+## Round 5 Execution Record
+
+Current problem: GitHub metrics adjudication overlays could be used to calculate AI finding quality fields with only partial local type checks. That left room for drift from the reviewer-comparison contract.
+
+Proposed solution: reuse the existing reviewer-comparison validator before importing adjudication overlay records into `collect_github_metrics.py`.
+
+Code or configuration changes: update `collect_github_metrics.py` to validate extracted overlay records; add a failure-path test for invalid reviewer counts; update README, changelog, and this backlog.
+
+Tests: run the focused metrics collection tests, full unit suite, and repository validation.
+
+Documentation update: mark P1-07 complete in this backlog, clarify overlay validation in README, and update the changelog.
+
+Compatibility impact: valid overlay files are unchanged. Invalid overlays now fail earlier with a clear validation error instead of producing derived metrics.
+
+Validation steps:
+
+```powershell
+python -m unittest tests.test_skill_scripts.MetricsCollectionTests
 python -m unittest discover -s tests
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 ```
