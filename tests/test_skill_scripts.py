@@ -1217,6 +1217,63 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["fusion"]["llm_statuses"], ["mock", "ok"])
             self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
 
+    def test_review_runner_invalid_structured_output_needs_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            incomplete_output = {
+                "verdict": "Ready",
+                "risk_tier": "L1",
+                "findings": [],
+            }
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "incomplete-command": {
+                                "type": "command",
+                                "model": "incomplete",
+                                "command": [sys.executable, "-c", f"import json; print(json.dumps({incomplete_output!r}))"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "incomplete-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertEqual(review_pass["status"], "ok")
+            self.assertIn("missing required field: needs_confirmation", review_pass["structured_output_errors"])
+            self.assertIn("correctness: missing required field: needs_confirmation", data["fusion"]["output_contract_errors"])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+
     def test_review_runner_rejects_shell_string_command(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "runner.json"

@@ -18,6 +18,17 @@ from typing import Any
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 MEASURE_DIFF = Path(__file__).resolve().with_name("measure_diff.py")
 DEFAULT_CONFIG = ASSET_DIR / "review-runner.config.example.json"
+ALLOWED_VERDICTS = {"Ready", "Not ready", "Needs confirmation", "Not reviewable"}
+ALLOWED_RISK_TIERS = {"L0", "L1", "L2", "L3", "L4"}
+STRUCTURED_REVIEW_FIELD_TYPES = {
+    "verdict": str,
+    "risk_tier": str,
+    "findings": list,
+    "needs_confirmation": list,
+    "validation": list,
+    "ai_review_evidence": dict,
+    "residual_risk": list,
+}
 
 
 class ConfigError(ValueError):
@@ -106,7 +117,15 @@ def output_contract(manifest: dict[str, Any], contract_id: str) -> dict[str, Any
     contract = as_object(contracts.get(contract_id), f"output_contracts.{contract_id}")
     as_string(contract.get("version"), f"output_contracts.{contract_id}.version")
     as_string(contract.get("instructions"), f"output_contracts.{contract_id}.instructions")
+    contract_required_fields(contract, contract_id)
     return contract
+
+
+def contract_required_fields(contract: dict[str, Any], contract_id: str) -> list[str]:
+    fields = contract.get("required_fields")
+    if not isinstance(fields, list) or not fields or not all(isinstance(item, str) and item for item in fields):
+        raise ConfigError(f"output_contracts.{contract_id}.required_fields must be a non-empty array of strings")
+    return fields
 
 
 def enabled_passes(config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -300,6 +319,45 @@ def parse_structured_output(output: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def validate_structured_output(output: dict[str, Any], contract: dict[str, Any], contract_id: str) -> list[str]:
+    errors: list[str] = []
+    for field in contract_required_fields(contract, contract_id):
+        if field not in output:
+            errors.append(f"missing required field: {field}")
+
+    for field, expected_type in STRUCTURED_REVIEW_FIELD_TYPES.items():
+        if field in output and not isinstance(output[field], expected_type):
+            errors.append(f"{field} must be a {expected_type.__name__}")
+
+    verdict = output.get("verdict")
+    if isinstance(verdict, str) and verdict not in ALLOWED_VERDICTS:
+        errors.append(f"verdict must be one of: {', '.join(sorted(ALLOWED_VERDICTS))}")
+
+    risk_tier = output.get("risk_tier")
+    if isinstance(risk_tier, str) and risk_tier not in ALLOWED_RISK_TIERS:
+        errors.append(f"risk_tier must be one of: {', '.join(sorted(ALLOWED_RISK_TIERS))}")
+
+    return errors
+
+
+def parse_and_validate_structured_output(
+    output: str,
+    status: str,
+    contract: dict[str, Any],
+    contract_id: str,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if not output.strip() and status in {"dry_run", "failed"}:
+        return None, []
+    if not output.strip():
+        return None, [f"{contract_id} output is empty"]
+
+    structured = parse_structured_output(output)
+    if structured is None:
+        return None, [f"{contract_id} output must be a JSON object"]
+
+    return structured, validate_structured_output(structured, contract, contract_id)
+
+
 def run_diff_measurement(config: dict[str, Any], no_diff: bool) -> dict[str, Any]:
     run_config = as_object(config.get("run", {}), "run")
     if no_diff or run_config.get("measure_diff", True) is False:
@@ -345,12 +403,17 @@ def fuse_review(diff: dict[str, Any], pass_results: list[dict[str, Any]]) -> dic
     statuses = {str(item.get("status")) for item in pass_results}
     structured = [item.get("structured_output") for item in pass_results if isinstance(item.get("structured_output"), dict)]
     blocking_findings = any(severity_blocks(item.get("findings")) for item in structured)
+    output_contract_errors = [
+        f"{item.get('id')}: {error}"
+        for item in pass_results
+        for error in item.get("structured_output_errors", [])
+    ]
 
     if "large-diff-not-reviewable-threshold" in warnings:
         verdict = "Not reviewable"
     elif blocking_findings:
         verdict = "Not ready"
-    elif warnings or statuses & {"mock", "dry_run", "failed"}:
+    elif warnings or output_contract_errors or statuses & {"mock", "dry_run", "failed"}:
         verdict = "Needs confirmation"
     else:
         verdict = "Ready"
@@ -367,6 +430,7 @@ def fuse_review(diff: dict[str, Any], pass_results: list[dict[str, Any]]) -> dic
         "risk_tier": risk_tier,
         "rule_warnings": warnings,
         "llm_statuses": sorted(statuses),
+        "output_contract_errors": output_contract_errors,
         "explanation": "Fusion combines measure_diff.py rule signals with structured reviewer outputs; human owner still decides merge readiness.",
     }
 
@@ -407,6 +471,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             },
         )
         result = execute_provider(provider_name, providers, prompt, pass_id, template, args.dry_run, max_output_chars)
+        structured_output, structured_output_errors = parse_and_validate_structured_output(result.output, result.status, contract, contract_id)
         pass_report: dict[str, Any] = {
             "id": pass_id,
             "template_id": template_id,
@@ -418,7 +483,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "estimated_input_tokens": result.input_tokens,
             "estimated_output_tokens": result.output_tokens,
             "estimated_cost_usd": result.estimated_cost_usd,
-            "structured_output": parse_structured_output(result.output),
+            "structured_output": structured_output,
+            "structured_output_errors": structured_output_errors,
         }
         if result.output and pass_report["structured_output"] is None:
             pass_report["raw_output"] = result.output
@@ -469,6 +535,11 @@ def print_markdown(report: dict[str, Any]) -> None:
         print("## Rule Warnings")
         for warning in fusion["rule_warnings"]:
             print(f"- `{warning}`")
+    if fusion["output_contract_errors"]:
+        print()
+        print("## Output Contract Warnings")
+        for error in fusion["output_contract_errors"]:
+            print(f"- {error}")
     print()
     print("## Passes")
     for item in report["passes"]:

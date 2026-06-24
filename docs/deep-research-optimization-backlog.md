@@ -49,7 +49,7 @@ Guardrails:
 | ID | Item | Current fact | Status | Decision and reason |
 | --- | --- | --- | --- | --- |
 | P1-01 | Validate review runner configuration and prompt manifest shape. | Config and manifest are JSON-valid, but there is no dedicated schema or validator for runner-specific fields. | Open. | Add a lightweight standard-library validator because the runner is now the main LLM abstraction surface. |
-| P1-02 | Enforce structured review output contracts from command providers. | The runner parses JSON output but does not fully validate required output fields before fusion. | Open. | Treat invalid reviewer output as non-blocking evidence that needs confirmation, not as a clean pass. |
+| P1-02 | Enforce structured review output contracts from command providers. | The runner now validates structured output required fields and top-level field types before fusion. | Complete in round 2. | Treat invalid reviewer output as non-blocking evidence that needs confirmation, not as a clean pass. |
 | P1-03 | Strengthen prompt template versioning policy. | Templates have IDs and versions; change policy and schema checks are only partially explicit. | Open. | Add validation and documentation so prompt changes are auditable and rollback-friendly. |
 | P1-04 | Keep multi-provider behavior minimal but explicit. | `mock` and `command` providers support many external tools without SDK dependencies. Native OpenAI/Anthropic SDK providers are `unspecified`. | Open as design decision. | Avoid SDK providers for now to keep dependency weight low; document command-provider contract as the supported extension point. |
 | P1-05 | Improve timeout, retry, fallback, and failure observability. | Attempts record status, elapsed time, stderr snippets, fallback, and timeout outcomes. Backoff policy is `unspecified`. | Open. | Keep immediate retries for now; add clearer failure summaries before adding configurable backoff. |
@@ -100,6 +100,28 @@ Validation steps:
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 python -m unittest discover -s tests
+```
+
+## Round 2 Execution Record
+
+Current problem: the optional review runner parsed provider stdout as JSON but did not enforce the `structured-review-v1` contract before fusion. A provider could return incomplete JSON and still appear as an `ok` reviewer pass.
+
+Proposed solution: validate required structured output fields and top-level field types after provider execution. Keep provider process status separate from output-contract validity, and make fusion return `Needs confirmation` when output-contract errors are present.
+
+Code or configuration changes: update `run_review_passes.py` to add structured output validation and output-contract warnings; update tests with an incomplete command-provider response; no config format change.
+
+Tests: run the focused review-runner test class, full unit suite, and repository validation.
+
+Documentation update: mark P1-02 complete in this backlog and record this slice.
+
+Compatibility impact: additive report fields only. Existing configs, mock defaults, command-provider contract, install paths, and review-only behavior remain unchanged.
+
+Validation steps:
+
+```powershell
+python -m unittest tests.test_skill_scripts.ReviewRunnerTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 ```
 
 ## Decision Log

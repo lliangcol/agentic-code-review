@@ -49,7 +49,7 @@
 | ID | 事项 | 当前事实 | 状态 | 决策和原因 |
 | --- | --- | --- | --- | --- |
 | P1-01 | 校验 review runner 配置和 prompt manifest 形态。 | 配置和 manifest 目前能通过 JSON 合法性检查，但没有专门校验 runner 字段的 schema 或 validator。 | 未完成。 | 增加仅依赖标准库的轻量 validator，因为 runner 已经是主要 LLM 抽象面。 |
-| P1-02 | 强制校验 command provider 的结构化 review 输出契约。 | runner 会解析 JSON 输出，但在 fusion 前没有完整校验必要输出字段。 | 未完成。 | 非法 reviewer 输出应作为需要确认的证据，而不是干净通过。 |
+| P1-02 | 强制校验 command provider 的结构化 review 输出契约。 | runner 现在会在 fusion 前校验结构化输出必要字段和顶层字段类型。 | 第 2 轮完成。 | 非法 reviewer 输出应作为需要确认的证据，而不是干净通过。 |
 | P1-03 | 加强 prompt template 版本策略。 | Templates 已经有 ID 和 version；变更策略与 schema 检查只部分显式。 | 未完成。 | 增加校验和文档，让 prompt 变更可审计、可回滚。 |
 | P1-04 | 保持 multi-provider 行为最小但明确。 | `mock` 和 `command` providers 可以覆盖多种外部工具且不引入 SDK 依赖。原生 OpenAI/Anthropic SDK providers 是 `unspecified`。 | 作为设计决策保持打开。 | 暂不加 SDK providers，以降低依赖重量；把 command-provider contract 记录为受支持扩展点。 |
 | P1-05 | 改善超时、重试、fallback 和失败可观测性。 | attempts 已记录 status、elapsed time、stderr 片段、fallback 和 timeout 结果。Backoff 策略是 `unspecified`。 | 未完成。 | 当前保留立即重试；先补更清晰的失败摘要，再决定是否加可配置 backoff。 |
@@ -100,6 +100,28 @@
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 python -m unittest discover -s tests
+```
+
+## 第 2 轮执行记录
+
+当前问题：可选 review runner 会把 provider stdout 解析为 JSON，但没有在 fusion 前强制执行 `structured-review-v1` 契约。Provider 可能返回字段不完整的 JSON，却仍表现为 `ok` reviewer pass。
+
+拟议方案：provider 执行后校验结构化输出的必要字段和顶层字段类型。Provider 进程状态与输出契约有效性分开记录；当存在输出契约错误时，fusion 返回 `Needs confirmation`。
+
+代码或配置改动：更新 `run_review_passes.py`，增加结构化输出校验和 output-contract warnings；增加一个 incomplete command-provider response 的测试；不改变配置格式。
+
+测试：运行聚焦的 review-runner 测试类、全量单元测试和仓库校验。
+
+文档更新：在本 backlog 中标记 P1-02 完成，并记录本轮切片。
+
+兼容性影响：只新增 report 字段。现有 configs、mock defaults、command-provider contract、安装路径和 review-only 行为保持不变。
+
+验证步骤：
+
+```powershell
+python -m unittest tests.test_skill_scripts.ReviewRunnerTests
+python -m unittest discover -s tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-skill.ps1
 ```
 
 ## 决策日志
