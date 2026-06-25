@@ -42,7 +42,7 @@ Default behavior stays review-only. The workflow must check reviewability first,
 
 ## Current Known Risks
 
-- The working tree already contains broad changes across README, changelog, runner, validators, diff measurement, metrics collection, and tests. Treat those as existing work and avoid unrelated rewrites.
+- The current branch contains broad changes across README, changelog, runner, validators, diff measurement, metrics collection, and tests. Treat those as existing work and avoid unrelated rewrites.
 - JSON stdout purity and structured error consistency remain the highest-value stability theme for CLI users and automation.
 - Runner command providers remain sensitive because they execute local commands. Config examples and docs must keep secrets in environment-owned provider configuration, never in repository files.
 - Markdown validation is intentionally strict about private path leakage, secret-like values, localized companions, and CI gate weakening.
@@ -67,7 +67,11 @@ Default behavior stays review-only. The workflow must check reviewability first,
 - Added a focused command provider timeout test that verifies timeout attempts are preserved in pass-level and fusion-level provider failure summaries and still produce a `Needs confirmation` fusion verdict.
 - Added a focused empty-output command provider test that verifies a zero-exit command with empty stdout is still reported as a provider failure without leaking to global stderr.
 - Added a focused non-JSON command provider output test that verifies bounded raw output, output-contract warnings, a `Needs confirmation` fusion verdict, and clean global stderr.
+- Tightened prompt recording so rendered prompts are omitted by default, only `--include-prompts` records them, and `run.include_prompt_in_report` is rejected as config-level prompt recording.
+- Added fail-closed runner config validation for unknown `run` keys so stale or risky controls such as auto-merge or write-file flags cannot be silently ignored.
+- Added fail-closed provider config validation for unknown provider keys so misplaced secrets or misspelled timeout fields cannot be silently accepted.
+- Added fail-closed pricing config validation for unknown pricing keys so misspelled cost fields cannot be treated as zero-cost defaults.
 
 ## Next Round Recommendation
 
-Focus on one prompt-recording safety defect. The best next target is a focused runner test that verifies `--include-prompts` is the only path that records rendered prompts and that default reports keep prompts omitted.
+Continue runner configuration hygiene with one small fail-closed check. The best next target is top-level runner config unknown keys, so stale controls outside `run`, `providers`, and `review_passes` cannot be silently accepted.

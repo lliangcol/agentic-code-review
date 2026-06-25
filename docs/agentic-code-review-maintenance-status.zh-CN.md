@@ -42,7 +42,7 @@
 
 ## 当前已知风险
 
-- 当前工作区已经存在覆盖 README、changelog、runner、validators、diff measurement、metrics collection 和 tests 的较大范围改动。后续应把这些视为既有工作，避免无关重写。
+- 当前分支已经包含覆盖 README、changelog、runner、validators、diff measurement、metrics collection 和 tests 的较大范围改动。后续应把这些视为既有工作，避免无关重写。
 - JSON stdout purity 和结构化错误一致性仍是 CLI 用户和自动化场景中收益最高的稳定性主题。
 - Runner command providers 仍然敏感，因为它们会执行本地命令。配置示例和文档必须让 secrets 留在 provider 自己的环境中，不能写入仓库文件。
 - Markdown 校验会严格检查 private path leakage、secret-like values、中英文伴随文件和 CI gate weakening。
@@ -67,7 +67,11 @@
 - 新增一个聚焦的 command provider timeout 测试，验证 timeout attempt 会保留在 pass-level 和 fusion-level provider failure summaries 中，并仍然产生 `Needs confirmation` fusion verdict。
 - 新增一个聚焦的 empty-output command provider 测试，验证零退出码但 stdout 为空的命令仍会报告为 provider failure，并且不会泄漏到全局 stderr。
 - 新增一个聚焦的非 JSON command provider output 测试，验证 raw output 有边界、output-contract warnings 生效、fusion verdict 为 `Needs confirmation`，且全局 stderr 为空。
+- 收紧 prompt recording：默认省略 rendered prompts，只有 `--include-prompts` 会记录它们，并拒绝 `run.include_prompt_in_report` 这种 config-level prompt recording。
+- 为未知 `run` keys 增加 fail-closed runner config 校验，避免 auto-merge 或 write-file flags 等 stale 或 risky controls 被静默忽略。
+- 为未知 provider keys 增加 fail-closed provider config 校验，避免 misplaced secrets 或拼错的 timeout fields 被静默接受。
+- 为未知 pricing keys 增加 fail-closed pricing config 校验，避免拼错的 cost fields 被当作 zero-cost defaults。
 
 ## 下一轮建议
 
-聚焦一个 prompt-recording safety 缺陷。最合适的下一步是添加一个 runner 聚焦测试，验证只有 `--include-prompts` 会记录渲染后的 prompts，默认 report 继续省略 prompts。
+继续推进 runner configuration hygiene，每轮只做一个小型 fail-closed 检查。最合适的下一步是处理 top-level runner config 未知 keys，避免 `run`、`providers` 和 `review_passes` 之外的 stale controls 被静默接受。
