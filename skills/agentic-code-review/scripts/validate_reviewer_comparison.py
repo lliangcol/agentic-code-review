@@ -115,6 +115,18 @@ def validate_record(data: Any) -> list[str]:
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             errors.append(f"{field} must be an array of strings")
 
+    confirmed = data.get("confirmed_findings", [])
+    rejected = data.get("rejected_findings", [])
+    if (
+        isinstance(confirmed, list)
+        and all(isinstance(item, str) for item in confirmed)
+        and isinstance(rejected, list)
+        and all(isinstance(item, str) for item in rejected)
+    ):
+        overlap = sorted(set(confirmed) & set(rejected))
+        for finding in overlap:
+            errors.append(f"finding appears in both confirmed_findings and rejected_findings: {finding}")
+
     return errors
 
 

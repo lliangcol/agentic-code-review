@@ -695,6 +695,42 @@ class AssetValidatorTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("reviewers[0].tool_or_model must be a non-empty string", result.stderr)
 
+    def test_reviewer_comparison_rejects_conflicting_adjudication(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            record = Path(temp) / "reviewers.json"
+            record.write_text(
+                json.dumps(
+                    {
+                        "repository": "repo",
+                        "revision": "sha",
+                        "risk_tier": "L3",
+                        "human_owner": "owner",
+                        "reviewers": [
+                            {
+                                "name": "Correctness",
+                                "tool_or_model": "example",
+                                "prompt_or_role": "role",
+                                "findings": 2,
+                                "valid_findings": 1,
+                                "false_positive_findings": 1,
+                            }
+                        ],
+                        "confirmed_findings": ["same finding"],
+                        "rejected_findings": ["same finding"],
+                        "residual_human_judgment": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run([sys.executable, str(VALIDATE_REVIEWER_COMPARISON), str(record)], REPO_ROOT, check=False)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "finding appears in both confirmed_findings and rejected_findings: same finding",
+                result.stderr,
+            )
+
     def test_hostile_fixtures_validate(self) -> None:
         result = run([sys.executable, str(VALIDATE_HOSTILE_FIXTURES)], REPO_ROOT)
         self.assertIn("validation passed", result.stdout)
@@ -955,6 +991,62 @@ class MetricsCollectionTests(unittest.TestCase):
             self.assertIn("valid_findings + false_positive_findings must not exceed findings", data["errors"][0])
             self.assertEqual(result.stderr, "")
 
+    def test_collect_github_metrics_rejects_conflicting_adjudication_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            adjudication = Path(temp) / "reviewers.json"
+            payload.write_text("[]", encoding="utf-8")
+            adjudication.write_text(
+                json.dumps(
+                    {
+                        "repository": "owner/repo",
+                        "revision": "PR-1",
+                        "risk_tier": "L2",
+                        "human_owner": "owner@example.invalid",
+                        "reviewers": [
+                            {
+                                "name": "Correctness",
+                                "tool_or_model": "model-a",
+                                "prompt_or_role": "Correctness",
+                                "findings": 2,
+                                "valid_findings": 1,
+                                "false_positive_findings": 1,
+                            }
+                        ],
+                        "confirmed_findings": ["same finding"],
+                        "rejected_findings": ["same finding"],
+                        "residual_human_judgment": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--adjudication-json",
+                    str(adjudication),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertIn("finding appears in both confirmed_findings and rejected_findings: same finding", data["errors"][0])
+            self.assertEqual(result.stderr, "")
+
     def test_collect_github_metrics_rereviews_validate(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             payload = Path(temp) / "prs.json"
@@ -1038,6 +1130,93 @@ class MetricsCollectionTests(unittest.TestCase):
 
             self.assertEqual(data["not_reviewable_count"], 1)
             self.assertEqual(data["gate_failure_count"], 1)
+
+    def test_collect_github_metrics_rejects_non_object_pr_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            payload.write_text(
+                json.dumps(
+                    [
+                        {
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "merged_at": "2026-01-02T00:00:00Z",
+                            "changed_files": 1,
+                            "additions": 1,
+                            "deletions": 1,
+                            "reviews": [],
+                        },
+                        "not a pr object",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertEqual(data["errors"], ["pull_requests[1] must be an object"])
+            self.assertEqual(result.stderr, "")
+
+    def test_collect_github_metrics_rejects_negative_change_numbers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            payload.write_text(
+                json.dumps(
+                    [
+                        {
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "merged_at": "2026-01-02T00:00:00Z",
+                            "changed_files": -1,
+                            "additions": 1,
+                            "deletions": 1,
+                            "reviews": [],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertEqual(data["errors"], ["pull_requests[0].changed_files must be a non-negative number"])
+            self.assertEqual(result.stderr, "")
 
     def test_collect_github_metrics_caps_test_change_ratio(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1670,6 +1849,145 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertFalse(data["ok"])
             self.assertIn("provider fallback cycle detected: primary -> secondary -> primary", data["errors"])
             self.assertNotIn("Traceback", result.stderr)
+
+    def test_review_runner_rejects_missing_fallback_before_provider_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            marker = Path(temp) / "provider-executed.txt"
+            provider_script = Path(temp) / "provider.py"
+            provider_script.write_text(
+                "import json, pathlib\n"
+                f"pathlib.Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n"
+                "print(json.dumps({"
+                "'verdict':'Ready','risk_tier':'L1','findings':[],"
+                "'needs_confirmation':[],'validation':[],"
+                "'ai_review_evidence':{},'residual_risk':[]"
+                "}))\n",
+                encoding="utf-8",
+            )
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "broken": {
+                                "type": "command",
+                                "model": "broken",
+                                "command": [sys.executable, str(provider_script)],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "missing-fallback",
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "broken",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn("providers.broken.fallback references unknown provider: missing-fallback", data["errors"][0])
+            self.assertFalse(marker.exists())
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_rejects_fallback_cycle_before_provider_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            marker = Path(temp) / "provider-executed.txt"
+            provider_script = Path(temp) / "provider.py"
+            provider_script.write_text(
+                "import json, pathlib\n"
+                f"pathlib.Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n"
+                "print(json.dumps({"
+                "'verdict':'Ready','risk_tier':'L1','findings':[],"
+                "'needs_confirmation':[],'validation':[],"
+                "'ai_review_evidence':{},'residual_risk':[]"
+                "}))\n",
+                encoding="utf-8",
+            )
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "primary": {
+                                "type": "command",
+                                "model": "primary",
+                                "command": [sys.executable, str(provider_script)],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "secondary",
+                            },
+                            "secondary": {
+                                "type": "mock",
+                                "model": "secondary",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "primary",
+                            },
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn("provider fallback cycle detected: primary -> secondary -> primary", data["errors"][0])
+            self.assertFalse(marker.exists())
+            self.assertEqual(result.stderr, "")
 
     def test_review_runner_dry_run_omits_prompts_by_default(self) -> None:
         result = run(
@@ -3232,7 +3550,7 @@ class ReviewRunnerTests(unittest.TestCase):
             data = json.loads(result.stdout)
             self.assertEqual(data["schema_version"], "review-runner-error-v1")
             self.assertFalse(data["ok"])
-            self.assertEqual(data["errors"], ["command provider command must be a non-empty array of strings"])
+            self.assertEqual(data["errors"], ["providers.shell-string.command must be a non-empty array of strings"])
             self.assertEqual(result.stderr, "")
 
 
