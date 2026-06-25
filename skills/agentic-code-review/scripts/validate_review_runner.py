@@ -24,6 +24,24 @@ from run_review_passes import (
 )
 
 
+def validate_top_level_config(config: dict[str, Any]) -> list[str]:
+    allowed_fields = {
+        "$schema",
+        "default_provider",
+        "description",
+        "output_contract",
+        "prompt_manifest",
+        "providers",
+        "review_passes",
+        "run",
+        "schema_version",
+    }
+    return [
+        f"{field} is unsupported; remove unknown top-level runner config keys"
+        for field in sorted(set(config) - allowed_fields)
+    ]
+
+
 def validate_provider(name: str, value: Any, providers: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if not name:
@@ -247,6 +265,7 @@ def validate_config(config_path: Path, prompt_manifest_override: str | None = No
 
     manifest, manifest_path, templates, manifest_errors = validate_prompt_manifest(config, config_path, prompt_manifest_override)
     errors.extend(manifest_errors)
+    errors.extend(validate_top_level_config(config))
 
     try:
         providers = as_object(config.get("providers"), "providers")
