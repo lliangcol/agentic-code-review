@@ -1449,6 +1449,62 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertIn("write_files is unsupported; remove unknown top-level runner config keys", data["errors"])
             self.assertEqual(result.stderr, "")
 
+    def test_validate_review_runner_missing_prompt_manifest_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "validator manifest path with spaces"
+            root.mkdir()
+            config = root / "runner.json"
+            missing = root / "missing prompt manifest.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(missing),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "mock-primary",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["config"], str(config))
+            self.assertIsNone(data["prompt_manifest"])
+            self.assertIn(f"Cannot read {missing}", data["errors"][0])
+            self.assertEqual(result.stderr, "")
+
     def test_validate_review_runner_missing_fallback_fails_cleanly(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "runner.json"
