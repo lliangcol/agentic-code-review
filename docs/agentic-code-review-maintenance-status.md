@@ -64,7 +64,8 @@ Default behavior stays review-only. The workflow must check reviewability first,
 - Added a focused `validate_review_runner.py --format json` invalid-config test that proves structured errors are emitted on stdout, stderr stays empty, and the exit code is non-zero.
 - Added a focused runner retry-exhaustion test that proves each failed command provider attempt is preserved in pass-level and fusion-level provider failure summaries while global stderr stays empty.
 - Strengthened the missing-command fallback test so command-not-found failures must appear in both pass-level and fusion-level provider failure summaries without relying on traceback absence alone.
+- Added a focused command provider timeout test that verifies timeout attempts are preserved in pass-level and fusion-level provider failure summaries and still produce a `Needs confirmation` fusion verdict.
 
 ## Next Round Recommendation
 
-Focus on one timeout reporting defect. The best next target is a focused command provider timeout test that verifies timeout attempts are summarized clearly and still produce a `Needs confirmation` fusion verdict.
+Focus on one empty-output reporting defect. The best next target is a focused command provider test that exits successfully with empty stdout and verifies the failure summary is clear without leaking to global stderr.

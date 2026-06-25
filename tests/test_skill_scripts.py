@@ -2211,6 +2211,62 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
             self.assertNotIn("Traceback", result.stderr)
 
+    def test_review_runner_timeout_reports_provider_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "slow-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "slow-command": {
+                                "type": "command",
+                                "model": "slow",
+                                "command": [sys.executable, "-c", "import time; time.sleep(2)"],
+                                "timeout_seconds": 0.01,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "slow-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertEqual(review_pass["provider"], "slow-command")
+            self.assertEqual(review_pass["status"], "failed")
+            self.assertEqual(review_pass["attempts"][0]["status"], "timeout")
+            self.assertIn("slow-command attempt 1 timeout", review_pass["attempt_failures"][0])
+            self.assertIn("correctness: slow-command attempt 1 timeout", data["fusion"]["provider_failures"][0])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+            self.assertEqual(result.stderr, "")
+
     def test_review_runner_mixed_mock_status_needs_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "runner.json"

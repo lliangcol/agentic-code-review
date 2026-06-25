@@ -64,7 +64,8 @@
 - 新增一个聚焦的 `validate_review_runner.py --format json` invalid-config 测试，证明结构化错误写入 stdout、stderr 保持为空，并返回非零退出码。
 - 新增一个聚焦的 runner retry-exhaustion 测试，证明每次失败的 command provider attempt 都会保留在 pass-level 和 fusion-level provider failure summaries 中，同时全局 stderr 保持为空。
 - 强化 missing-command fallback 测试，要求 command-not-found failure 同时出现在 pass-level 和 fusion-level provider failure summaries 中，而不是只依赖没有 traceback。
+- 新增一个聚焦的 command provider timeout 测试，验证 timeout attempt 会保留在 pass-level 和 fusion-level provider failure summaries 中，并仍然产生 `Needs confirmation` fusion verdict。
 
 ## 下一轮建议
 
-聚焦一个 timeout reporting 缺陷。最合适的下一步是添加一个 command provider timeout 聚焦测试，验证 timeout attempt 被清晰汇总，并仍然产生 `Needs confirmation` fusion verdict。
+聚焦一个 empty-output reporting 缺陷。最合适的下一步是添加一个 command provider 成功退出但 stdout 为空的聚焦测试，验证 failure summary 清晰且不会泄漏到全局 stderr。
