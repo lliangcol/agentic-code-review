@@ -38,6 +38,18 @@ def validate_provider(name: str, value: Any, providers: dict[str, Any]) -> list[
     except ConfigError as exc:
         return [str(exc)]
 
+    allowed_fields = {
+        "command",
+        "fallback",
+        "max_retries",
+        "model",
+        "pricing",
+        "timeout_seconds",
+        "type",
+    }
+    for field in sorted(set(provider) - allowed_fields):
+        errors.append(f"providers.{name}.{field} is unsupported; remove unknown provider config keys")
+
     retries = provider.get("max_retries", 0)
     if type(retries) is not int or retries < 0:
         errors.append(f"providers.{name}.max_retries must be a non-negative integer")
