@@ -54,7 +54,7 @@
 2. 为包含空格的 config、manifest、context-file 和 output paths 补充跨平台 quoting 测试。
 3. 扩展 runner provider failure summaries，覆盖 timeout、retry exhaustion、fallback、empty output、invalid JSON output 和 command-not-found 行为。
 4. 收紧剩余 runner CLI edge cases 的文档说明，同时不引入可写默认行为。
-5. 为 prompt injection、workflow weakening、dependency metadata、release metadata、tool execution 和 secret exposure 示例增加 hostile fixture 覆盖。
+5. 随着新的 risky review surfaces 出现，继续扩展 hostile fixtures。
 6. 保持 README、简体中文 README、Skill references、assets 和本地 validators 同步，并避免夸大 review quality 或 cost savings。
 
 ## 已完成轮次
@@ -75,7 +75,8 @@
 - 为未知 review pass config keys 增加 fail-closed 校验，避免 stale 或 risky per-pass controls 被静默接受。
 - 在英文和简体中文 README 中补充 runner stdout/stderr、exit-code、dry-run 和 no-write 行为说明。
 - 为 `run_review_passes.py --format json` 增加 runner invalid-config JSON stdout purity 覆盖。
+- 扩展 hostile fixture 覆盖，加入 prompt injection、workflow weakening、dependency metadata、release metadata、tool execution 和 secret exposure 示例。
 
 ## 下一轮建议
 
-继续做聚焦的 JSON stdout purity 或文档打磨。合适的下一步是补充仍缺少 stdout-only 测试的 runner/validator edge cases，并扩展 hostile fixtures，覆盖 prompt injection、workflow weakening、dependency metadata、release metadata、tool execution 和 secret exposure 示例。
+继续做聚焦的 JSON stdout purity 或文档打磨。合适的下一步是补充仍缺少 stdout-only 测试的 runner/validator edge cases，并在发现新的 risky review surfaces 时继续扩展 hostile fixture categories。

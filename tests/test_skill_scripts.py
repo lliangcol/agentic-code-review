@@ -699,6 +699,21 @@ class AssetValidatorTests(unittest.TestCase):
         result = run([sys.executable, str(VALIDATE_HOSTILE_FIXTURES)], REPO_ROOT)
         self.assertIn("validation passed", result.stdout)
 
+    def test_hostile_fixtures_cover_required_surfaces(self) -> None:
+        data = load_json_file(ASSETS_DIR / "hostile-input-fixtures.json")
+        surfaces = {item["surface"] for item in data["fixtures"]}
+
+        self.assertTrue(
+            {
+                "prompt-injection",
+                "workflow-weakening",
+                "dependency-metadata",
+                "release-metadata",
+                "tool-execution",
+                "secret-exposure",
+            }.issubset(surfaces)
+        )
+
     def test_hostile_fixtures_unexpected_fields_fail(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             record = Path(temp) / "fixtures.json"

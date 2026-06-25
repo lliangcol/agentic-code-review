@@ -54,7 +54,7 @@ Default behavior stays review-only. The workflow must check reviewability first,
 2. Add cross-platform quoting tests for config, manifest, context-file, and output paths containing spaces.
 3. Expand runner provider failure summaries for timeout, retry exhaustion, fallback, empty output, invalid JSON output, and command-not-found behavior.
 4. Tighten documentation for remaining runner CLI edge cases without introducing write-capable defaults.
-5. Add hostile fixture coverage for prompt injection, workflow weakening, dependency metadata, release metadata, tool execution, and secret exposure examples.
+5. Continue expanding hostile fixtures as new risky review surfaces are discovered.
 6. Keep README, Simplified Chinese README, Skill references, assets, and local validators synchronized without claiming review quality or cost savings.
 
 ## Completed Rounds
@@ -75,7 +75,8 @@ Default behavior stays review-only. The workflow must check reviewability first,
 - Added fail-closed review pass config validation for unknown pass-level keys so stale or risky per-pass controls cannot be silently accepted.
 - Documented runner stdout/stderr, exit-code, dry-run, and no-write behavior in the English and Simplified Chinese READMEs.
 - Added runner invalid-config JSON stdout purity coverage for `run_review_passes.py --format json`.
+- Expanded hostile fixture coverage for prompt injection, workflow weakening, dependency metadata, release metadata, tool execution, and secret exposure examples.
 
 ## Next Round Recommendation
 
-Continue with focused JSON stdout purity or documentation polish. Good next targets are remaining runner/validator edge cases that still lack explicit stdout-only tests, plus hostile fixture expansion for prompt injection, workflow weakening, dependency metadata, release metadata, tool execution, and secret exposure examples.
+Continue with focused JSON stdout purity or documentation polish. Good next targets are remaining runner/validator edge cases that still lack explicit stdout-only tests, plus additional hostile fixture categories as new risky review surfaces are discovered.
