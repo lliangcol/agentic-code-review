@@ -1838,6 +1838,62 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertIn("providers.mock-primary.timeout is unsupported; remove unknown provider config keys", data["errors"])
             self.assertEqual(result.stderr, "")
 
+    def test_validate_review_runner_rejects_unknown_pricing_config_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "mock-primary",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "pricing": {
+                                    "input_per_million_tokens_usd": 0,
+                                    "output_per_million_tokens_usd": 0,
+                                    "input_cost": 1,
+                                },
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn("providers.mock-primary.pricing.input_cost is unsupported; remove unknown pricing config keys", data["errors"])
+            self.assertEqual(result.stderr, "")
+
     def test_review_runner_missing_context_file_json_error_is_stdout_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             missing = Path(temp) / "missing context with spaces.md"

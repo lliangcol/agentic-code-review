@@ -50,6 +50,19 @@ def validate_provider(name: str, value: Any, providers: dict[str, Any]) -> list[
     for field in sorted(set(provider) - allowed_fields):
         errors.append(f"providers.{name}.{field} is unsupported; remove unknown provider config keys")
 
+    pricing = provider.get("pricing", {})
+    if pricing is not None:
+        try:
+            pricing_obj = as_object(pricing, f"providers.{name}.pricing")
+            allowed_pricing_fields = {
+                "input_per_million_tokens_usd",
+                "output_per_million_tokens_usd",
+            }
+            for field in sorted(set(pricing_obj) - allowed_pricing_fields):
+                errors.append(f"providers.{name}.pricing.{field} is unsupported; remove unknown pricing config keys")
+        except ConfigError as exc:
+            errors.append(str(exc))
+
     retries = provider.get("max_retries", 0)
     if type(retries) is not int or retries < 0:
         errors.append(f"providers.{name}.max_retries must be a non-negative integer")
