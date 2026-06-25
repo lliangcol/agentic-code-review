@@ -66,7 +66,8 @@
 - 强化 missing-command fallback 测试，要求 command-not-found failure 同时出现在 pass-level 和 fusion-level provider failure summaries 中，而不是只依赖没有 traceback。
 - 新增一个聚焦的 command provider timeout 测试，验证 timeout attempt 会保留在 pass-level 和 fusion-level provider failure summaries 中，并仍然产生 `Needs confirmation` fusion verdict。
 - 新增一个聚焦的 empty-output command provider 测试，验证零退出码但 stdout 为空的命令仍会报告为 provider failure，并且不会泄漏到全局 stderr。
+- 新增一个聚焦的非 JSON command provider output 测试，验证 raw output 有边界、output-contract warnings 生效、fusion verdict 为 `Needs confirmation`，且全局 stderr 为空。
 
 ## 下一轮建议
 
-聚焦一个 invalid JSON output reporting 缺陷。最合适的下一步是添加一个 command provider 输出非 JSON stdout 的聚焦测试，验证 raw output 有边界，同时 output-contract warnings 驱动 `Needs confirmation`。
+聚焦一个 prompt-recording safety 缺陷。最合适的下一步是添加一个 runner 聚焦测试，验证只有 `--include-prompts` 会记录渲染后的 prompts，默认 report 继续省略 prompts。

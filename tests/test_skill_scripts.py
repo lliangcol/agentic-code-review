@@ -2324,6 +2324,67 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
             self.assertEqual(result.stderr, "")
 
+    def test_review_runner_non_json_command_output_reports_contract_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "text-command",
+                        "run": {"measure_diff": False, "max_output_chars": 32},
+                        "providers": {
+                            "text-command": {
+                                "type": "command",
+                                "model": "text",
+                                "command": [
+                                    sys.executable,
+                                    "-c",
+                                    "print('plain text review output that is intentionally not json')",
+                                ],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "text-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertEqual(review_pass["provider"], "text-command")
+            self.assertEqual(review_pass["status"], "ok")
+            self.assertIsNone(review_pass["structured_output"])
+            self.assertEqual(review_pass["structured_output_errors"], ["structured-review-v1 output must be a JSON object"])
+            self.assertEqual(review_pass["raw_output"], "plain text review output that is\n[truncated]")
+            self.assertIn("correctness: structured-review-v1 output must be a JSON object", data["fusion"]["output_contract_errors"])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+            self.assertEqual(result.stderr, "")
+
     def test_review_runner_mixed_mock_status_needs_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "runner.json"
