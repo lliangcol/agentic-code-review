@@ -1728,6 +1728,62 @@ class ReviewRunnerTests(unittest.TestCase):
             )
             self.assertEqual(result.stderr, "")
 
+    def test_validate_review_runner_rejects_unknown_run_config_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "mock-primary",
+                        "run": {
+                            "measure_diff": False,
+                            "auto_merge": True,
+                            "write_files": True,
+                        },
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn("run.auto_merge is unsupported; remove unknown run config keys", data["errors"])
+            self.assertIn("run.write_files is unsupported; remove unknown run config keys", data["errors"])
+            self.assertEqual(result.stderr, "")
+
     def test_review_runner_missing_context_file_json_error_is_stdout_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             missing = Path(temp) / "missing context with spaces.md"

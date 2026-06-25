@@ -114,6 +114,16 @@ def validate_run_config(config: dict[str, Any]) -> list[str]:
     except ConfigError as exc:
         return [str(exc)]
 
+    allowed_fields = {
+        "measure_diff",
+        "measure_diff_args",
+        "measure_diff_timeout_seconds",
+        "max_output_chars",
+    }
+    unsupported_fields = {"include_prompt_in_report"}
+    for field in sorted(set(run_config) - allowed_fields - unsupported_fields):
+        errors.append(f"run.{field} is unsupported; remove unknown run config keys")
+
     if "measure_diff" in run_config and not isinstance(run_config["measure_diff"], bool):
         errors.append("run.measure_diff must be a boolean")
     if "include_prompt_in_report" in run_config:
