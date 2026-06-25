@@ -115,7 +115,27 @@ def validate_record(data: Any) -> list[str]:
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             errors.append(f"{field} must be an array of strings")
 
+    confirmed = data.get("confirmed_findings", [])
+    rejected = data.get("rejected_findings", [])
+    if (
+        isinstance(confirmed, list)
+        and all(isinstance(item, str) for item in confirmed)
+        and isinstance(rejected, list)
+        and all(isinstance(item, str) for item in rejected)
+    ):
+        overlap = sorted(set(confirmed) & set(rejected))
+        for finding in overlap:
+            errors.append(f"finding appears in both confirmed_findings and rejected_findings: {finding}")
+
     return errors
+
+
+def build_error_report(message: str) -> dict[str, object]:
+    return {
+        "schema_version": "reviewer-comparison-validation-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
 
 
 def main() -> int:
@@ -126,7 +146,17 @@ def main() -> int:
     args = parser.parse_args()
 
     record_path = Path(args.record)
-    errors = validate_record(load_json(record_path))
+    try:
+        record = load_json(record_path)
+    except SystemExit as exc:
+        message = str(exc) or "validate_reviewer_comparison.py failed"
+        if args.format == "json":
+            print(json.dumps(build_error_report(message), indent=2, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
+        return 1
+
+    errors = validate_record(record)
     result = {"record": str(record_path), "errors": errors}
     if args.format == "json":
         print(json.dumps(result, indent=2, ensure_ascii=False))

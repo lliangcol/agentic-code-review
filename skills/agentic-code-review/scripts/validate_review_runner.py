@@ -12,7 +12,6 @@ from typing import Any
 from run_review_passes import (
     ConfigError,
     DEFAULT_CONFIG,
-    as_non_negative_number,
     as_object,
     as_string,
     contract_required_fields,
@@ -20,117 +19,29 @@ from run_review_passes import (
     load_prompt_manifest,
     output_contract,
     prompt_templates,
-    provider_pricing,
+    validate_fallback_chains,
+    validate_provider_config,
+    validate_review_passes_config,
+    validate_run_config,
 )
 
 
-def validate_provider(name: str, value: Any, providers: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    if not name:
-        return ["provider names must be non-empty strings"]
-
-    try:
-        provider = as_object(value, f"providers.{name}")
-        provider_type = as_string(provider.get("type"), f"providers.{name}.type")
-        as_string(provider.get("model", name), f"providers.{name}.model")
-        as_non_negative_number(provider.get("timeout_seconds", 120), f"providers.{name}.timeout_seconds")
-        provider_pricing(provider)
-    except ConfigError as exc:
-        return [str(exc)]
-
-    retries = provider.get("max_retries", 0)
-    if type(retries) is not int or retries < 0:
-        errors.append(f"providers.{name}.max_retries must be a non-negative integer")
-
-    if provider_type == "command":
-        command = provider.get("command")
-        if not isinstance(command, list) or not command or not all(isinstance(part, str) and part for part in command):
-            errors.append(f"providers.{name}.command must be a non-empty array of strings")
-    elif provider_type != "mock":
-        errors.append(f"providers.{name}.type must be one of: command, mock")
-
-    fallback = provider.get("fallback")
-    if fallback is not None:
-        if not isinstance(fallback, str) or not fallback:
-            errors.append(f"providers.{name}.fallback must be a non-empty string when set")
-        elif fallback not in providers:
-            errors.append(f"providers.{name}.fallback references unknown provider: {fallback}")
-        elif fallback == name:
-            errors.append(f"providers.{name}.fallback must not reference itself")
-
-    return errors
-
-
-def validate_run_config(config: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    try:
-        run_config = as_object(config.get("run", {}), "run")
-    except ConfigError as exc:
-        return [str(exc)]
-
-    if "measure_diff" in run_config and not isinstance(run_config["measure_diff"], bool):
-        errors.append("run.measure_diff must be a boolean")
-    if "include_prompt_in_report" in run_config and not isinstance(run_config["include_prompt_in_report"], bool):
-        errors.append("run.include_prompt_in_report must be a boolean")
-
-    for field, default in [("measure_diff_timeout_seconds", 30), ("max_output_chars", 20000)]:
-        try:
-            as_non_negative_number(run_config.get(field, default), f"run.{field}")
-        except ConfigError as exc:
-            errors.append(str(exc))
-
-    args = run_config.get("measure_diff_args", ["--no-untracked"])
-    if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
-        errors.append("run.measure_diff_args must be an array of strings")
-
-    return errors
-
-
-def validate_review_passes(config: dict[str, Any], templates: dict[str, dict[str, Any]], providers: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    review_passes = config.get("review_passes")
-    if not isinstance(review_passes, list) or not review_passes:
-        return ["review_passes must be a non-empty array"]
-
-    default_provider = config.get("default_provider")
-    if default_provider is not None:
-        if not isinstance(default_provider, str) or not default_provider:
-            errors.append("default_provider must be a non-empty string when set")
-        elif default_provider not in providers:
-            errors.append(f"default_provider references unknown provider: {default_provider}")
-
-    enabled_count = 0
-    for index, item in enumerate(review_passes):
-        try:
-            review_pass = as_object(item, f"review_passes[{index}]")
-            pass_id = as_string(review_pass.get("id"), f"review_passes[{index}].id")
-            template_id = as_string(review_pass.get("template_id"), f"review_passes[{index}].template_id")
-        except ConfigError as exc:
-            errors.append(str(exc))
-            continue
-
-        enabled = review_pass.get("enabled", True)
-        if not isinstance(enabled, bool):
-            errors.append(f"review_passes[{index}].enabled must be a boolean when set")
-        if enabled:
-            enabled_count += 1
-
-        if template_id not in templates:
-            errors.append(f"review_passes[{index}] references unknown template: {template_id}")
-
-        provider_name = review_pass.get("provider") or default_provider
-        if not isinstance(provider_name, str) or not provider_name:
-            errors.append(f"review_passes[{index}] has no provider and no default_provider")
-        elif provider_name not in providers:
-            errors.append(f"review_passes[{index}] references unknown provider: {provider_name}")
-
-        if not pass_id:
-            errors.append(f"review_passes[{index}].id must be non-empty")
-
-    if enabled_count == 0:
-        errors.append("at least one review pass must be enabled")
-
-    return errors
+def validate_top_level_config(config: dict[str, Any]) -> list[str]:
+    allowed_fields = {
+        "$schema",
+        "default_provider",
+        "description",
+        "output_contract",
+        "prompt_manifest",
+        "providers",
+        "review_passes",
+        "run",
+        "schema_version",
+    }
+    return [
+        f"{field} is unsupported; remove unknown top-level runner config keys"
+        for field in sorted(set(config) - allowed_fields)
+    ]
 
 
 def validate_prompt_manifest(config: dict[str, Any], config_path: Path, override: str | None) -> tuple[dict[str, Any] | None, Path | None, dict[str, dict[str, Any]] | None, list[str]]:
@@ -166,6 +77,7 @@ def validate_config(config_path: Path, prompt_manifest_override: str | None = No
 
     manifest, manifest_path, templates, manifest_errors = validate_prompt_manifest(config, config_path, prompt_manifest_override)
     errors.extend(manifest_errors)
+    errors.extend(validate_top_level_config(config))
 
     try:
         providers = as_object(config.get("providers"), "providers")
@@ -174,11 +86,12 @@ def validate_config(config_path: Path, prompt_manifest_override: str | None = No
         errors.append(str(exc))
 
     for name, provider in providers.items():
-        errors.extend(validate_provider(str(name), provider, providers))
+        errors.extend(validate_provider_config(str(name), provider, providers))
+    errors.extend(validate_fallback_chains(providers))
 
     errors.extend(validate_run_config(config))
     if templates is not None:
-        errors.extend(validate_review_passes(config, templates, providers))
+        errors.extend(validate_review_passes_config(config, templates, providers))
 
     return {
         "ok": not errors,

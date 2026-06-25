@@ -8,6 +8,36 @@ Added optional provider-abstracted review runner assets and script with prompt m
 
 Added review runner config and prompt manifest validation, including provider, fallback, template, and output-contract checks.
 
+Strengthened review runner validation to reject provider fallback cycles before execution.
+
+Changed `run_review_passes.py --format json` config failures to emit structured JSON errors on stdout while returning a non-zero exit code.
+
+Changed `measure_diff.py --format json` argument, config, missing-Git, and Git-context failures to emit structured JSON errors on stdout while returning a non-zero exit code.
+
+Changed `collect_github_metrics.py --format json` input and validation failures to emit structured JSON errors on stdout while returning a non-zero exit code.
+
+Changed `validate_metrics.py --format json` input and schema failures to emit structured JSON errors on stdout while returning a non-zero exit code.
+
+Changed `validate_batch_triage.py --format json` input failures to emit structured JSON errors on stdout while returning a non-zero exit code.
+
+Changed `validate_reviewer_comparison.py --format json` input failures to emit structured JSON errors on stdout while returning a non-zero exit code.
+
+Changed `validate_hostile_fixtures.py --format json` input failures to emit structured JSON errors on stdout while returning a non-zero exit code.
+
+Changed the review runner to preserve structured `measure_diff.py --format json` helper errors in `diff.errors` when diff measurement exits non-zero.
+
+Added review runner smoke coverage for config paths with spaces and relative prompt manifests resolved from the config file directory.
+
+Added review runner validator smoke coverage for config paths with spaces and relative prompt manifests resolved from the config file directory.
+
+Added review runner smoke coverage for context file paths with spaces and structured JSON errors for unreadable context files.
+
+Changed the review runner to redact common secret-like values from command provider stdout/stderr before writing provider output and attempt summaries to reports.
+
+Added review runner Markdown smoke coverage for redacted provider failure summaries.
+
+Added review runner raw-output smoke coverage for redacted command provider stdout that does not satisfy the structured output contract.
+
 Added review runner provider failure summaries so timeout, retry, and fallback degradation require confirmation.
 
 Validated GitHub metrics adjudication overlays against the reviewer-comparison contract before calculating AI finding quality fields.

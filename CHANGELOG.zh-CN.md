@@ -8,6 +8,36 @@
 
 增加 review runner config 和 prompt manifest 校验，覆盖 provider、fallback、template 和 output-contract 检查。
 
+加强 review runner 校验，在执行前拒绝 provider fallback cycles。
+
+调整 `run_review_passes.py --format json` config failure 行为：在 stdout 输出结构化 JSON 错误，同时返回非零退出码。
+
+调整 `measure_diff.py --format json` argument、config、missing-Git 和 Git context failure 行为：在 stdout 输出结构化 JSON 错误，同时返回非零退出码。
+
+调整 `collect_github_metrics.py --format json` input 和 validation failure 行为：在 stdout 输出结构化 JSON 错误，同时返回非零退出码。
+
+调整 `validate_metrics.py --format json` input 和 schema failure 行为：在 stdout 输出结构化 JSON 错误，同时返回非零退出码。
+
+调整 `validate_batch_triage.py --format json` input failure 行为：在 stdout 输出结构化 JSON 错误，同时返回非零退出码。
+
+调整 `validate_reviewer_comparison.py --format json` input failure 行为：在 stdout 输出结构化 JSON 错误，同时返回非零退出码。
+
+调整 `validate_hostile_fixtures.py --format json` input failure 行为：在 stdout 输出结构化 JSON 错误，同时返回非零退出码。
+
+调整 review runner 行为：当 diff measurement 非零退出时，在 `diff.errors` 中保留结构化 `measure_diff.py --format json` helper errors。
+
+增加 review runner smoke coverage，覆盖包含空格的 config 路径，以及基于 config 文件目录解析的相对 prompt manifest。
+
+增加 review runner validator smoke coverage，覆盖包含空格的 config 路径，以及基于 config 文件目录解析的相对 prompt manifest。
+
+增加 review runner smoke coverage，覆盖包含空格的 context file 路径，以及不可读取 context file 的结构化 JSON 错误。
+
+调整 review runner 行为：command provider stdout/stderr 写入 provider output 和 attempt summaries 前，会对常见 secret-like 值做 redaction。
+
+增加 review runner Markdown smoke coverage，覆盖已 redacted 的 provider failure summaries。
+
+增加 review runner raw-output smoke coverage，覆盖不满足 structured output contract 的 command provider stdout redaction。
+
 增加 review runner provider failure summaries，使 timeout、retry 和 fallback 降级需要确认。
 
 在计算 AI finding quality 字段前，按 reviewer-comparison contract 校验 GitHub metrics adjudication overlays。

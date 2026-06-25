@@ -111,6 +111,12 @@ Use agentic-code-review to triage these PRs by review risk.
 
 可选引用资料覆盖 CI/gate 完整性、可直接运行的异构 reviewer prompts、可留档的 reviewer 对比记录、machine-readable batch triage、恶意输入 fixtures、human-on-the-loop 审计计划、reviewer 校准，以及用于低成本 review-effort 信号的 diff measurement helper。
 
+调用 `validate_batch_triage.py --format json` 时，invalid JSON 等 input failures 会在 stdout 输出结构化 JSON 错误并返回非零退出码；record-level validation failures 仍保留在普通 JSON result 的 `errors` 数组中。
+
+调用 `validate_reviewer_comparison.py --format json` 时，invalid JSON 等 input failures 会在 stdout 输出结构化 JSON 错误并返回非零退出码；record-level validation failures 仍保留在普通 JSON result 的 `errors` 数组中。
+
+调用 `validate_hostile_fixtures.py --format json` 时，invalid JSON 等 input failures 会在 stdout 输出结构化 JSON 错误并返回非零退出码；fixture-level validation failures 仍保留在普通 JSON result 的 `errors` 数组中。
+
 ## 来源笔记
 
 文章来源依据以转述笔记保存于 `docs/agentic-code-review-source-notes.zh-CN.md`。实现对比和优化清单位于 `docs/agentic-code-review-implementation-analysis.zh-CN.md`。
@@ -124,6 +130,10 @@ Use agentic-code-review to triage these PRs by review risk.
 AI-generated throughput 可能增加 review 和 QA 负载。不要只用吞吐量证明 review 质量提升。在降低安全检查前，跟踪 review capacity、零 review 合并、review duration、`Not reviewable` rate、gate failures 和 reviewer calibration。
 
 使用 `skills/agentic-code-review/assets/review-capacity-metrics.template.csv` 和 `skills/agentic-code-review/assets/review-capacity-metrics.schema.json` 作为团队指标采集的起始素材。使用 `skills/agentic-code-review/scripts/validate_metrics.py` 校验收集到的指标；使用 `skills/agentic-code-review/scripts/collect_github_metrics.py` 从导出的 GitHub PR JSON 生成起始行。
+
+调用 `validate_metrics.py --format json` 时，input 和 schema failures 会在 stdout 输出结构化 JSON 错误并返回非零退出码；row-level validation failures 仍保留在普通 JSON result 的 `errors` 数组中。
+
+调用 `collect_github_metrics.py --format json` 时，unsupported payload shapes 或 invalid periods 等 input/validation failures 会在 stdout 输出结构化 JSON 错误并返回非零退出码。
 
 如需包含 AI reviewer quality 字段，可传入一个或多个 reviewer-comparison 或 adjudication 记录：
 
@@ -151,14 +161,23 @@ Runner 提供：
 - 从 `assets/review-prompt-manifest.json` 进行多 pass prompt 编排。
 - 通过 template ID 和 version 管理 prompt 版本。
 - 超时、重试和 fallback provider 行为。
+- 执行前校验 invalid providers、unknown fallback references 和 fallback cycles。
 - Provider attempt failure summaries，用于复核 timeout、retry 和 fallback。
+- Provider stdout/stderr 作为 structured 或 raw provider output 与 attempt summaries 写入 JSON 或 Markdown report 前，会对常见 secret-like 值做 best-effort redaction。
 - 估算 token 和成本统计。
-- 融合 `measure_diff.py` 规则信号的结构化 JSON 报告。
+- 融合 `measure_diff.py` 规则信号的结构化 JSON 报告；当 helper 非零退出时，保留结构化 diff-measurement failure reasons。
+- 对 config failure，`--format json` 会在 stdout 输出结构化错误并返回非零退出码。
 - 默认不记录渲染后的 prompt；只有明确传入 `--include-prompts` 时才写入报告。
 
-使用 `skills/agentic-code-review/assets/review-runner.config.example.json` 配置。Command provider 通过 stdin 接收渲染后的 prompt，并将 review 输出写到 stdout：
+使用 `skills/agentic-code-review/assets/review-runner.config.example.json` 配置。Command provider 通过 stdin 接收渲染后的 prompt，并将 review 输出写到 stdout。Providers 仍必须避免打印 secrets；output-stream redaction 只是 report-safety fallback，不是安全保证。
 
-Diff measurement 默认通过 `measure_diff_args: ["--no-untracked"]` 检查未暂存 working-tree diff。评审暂存提交候选时使用 `["--staged", "--no-untracked"]`；评审分支或工作区相对某个基线版本时使用 `["--base", "origin/main", "--no-untracked"]`。
+Runner 只把报告写到 stdout；它没有 output-file 模式，也不需要 `--no-write` flag 来防止修改文件。`--dry-run` 会渲染 prompts、估算 tokens 和 cost，并跳过 provider 调用。在 `--format json` 下，runner config 和 context-file failures 会在 stdout 输出结构化 `review-runner-error-v1` JSON，stderr 为空，并返回非零退出码。在 `--format markdown` 下，configuration failures 会写入 stderr，并同样返回非零退出码。
+
+相对 `prompt_manifest` 路径会基于 runner config 文件所在目录解析。Smoke tests 覆盖包含空格的 config 和 manifest 路径，因此自动化脚本应以 argument-array values 传递路径，而不是拼接 shell command string。
+
+`--context-file` 接受可重复的本地文件路径，并把内容读入渲染后的 prompt。在 `--format json` 模式下，不可读取的 context file 会在 stdout 输出结构化 `review-runner-error-v1` 错误并返回非零退出码。Smoke tests 覆盖包含空格的 context file 路径。
+
+Diff measurement 默认通过 `measure_diff_args: ["--no-untracked"]` 检查未暂存 working-tree diff。评审暂存提交候选时使用 `["--staged", "--no-untracked"]`；评审分支或工作区相对某个基线版本时使用 `["--base", "origin/main", "--no-untracked"]`。直接调用 `measure_diff.py --format json` 时，argument、config、missing-Git 和 Git context failure 会在 stdout 输出结构化 JSON 错误并返回非零退出码。Runner 会把这些 helper errors 保留在 `diff.errors` 中，而不是替换成通用 subprocess failure。
 
 ```json
 {
@@ -224,6 +243,8 @@ python .\skills\agentic-code-review\scripts\run_review_passes.py --dry-run --no-
 ```powershell
 python .\skills\agentic-code-review\scripts\validate_review_runner.py --format json
 ```
+
+`validate_review_runner.py --config` 使用与 runner 一致的、基于 config 文件目录的 `prompt_manifest` 解析。Smoke tests 覆盖包含空格的 validator config 和 manifest 路径。
 
 Claude Code smoke check 可安装到测试仓库的 `.claude/skills` 目录或已配置的全局 Claude skills 目标目录，确认已安装目录包含 `SKILL.md`、`references/`、`assets/` 和 `scripts/`，再在该测试仓库的 Claude Code 中调用 `/agentic-code-review`。
 

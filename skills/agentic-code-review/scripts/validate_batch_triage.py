@@ -74,6 +74,14 @@ def validate_record(data: Any) -> list[str]:
     return errors
 
 
+def build_error_report(message: str) -> dict[str, object]:
+    return {
+        "schema_version": "batch-triage-validation-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate batch triage JSON records.")
     default_path = Path(__file__).resolve().parents[1] / "assets" / "batch-triage.template.json"
@@ -82,7 +90,17 @@ def main() -> int:
     args = parser.parse_args()
 
     record_path = Path(args.record)
-    errors = validate_record(load_json(record_path))
+    try:
+        record = load_json(record_path)
+    except SystemExit as exc:
+        message = str(exc) or "validate_batch_triage.py failed"
+        if args.format == "json":
+            print(json.dumps(build_error_report(message), indent=2, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
+        return 1
+
+    errors = validate_record(record)
     result = {"record": str(record_path), "errors": errors}
     if args.format == "json":
         print(json.dumps(result, indent=2, ensure_ascii=False))

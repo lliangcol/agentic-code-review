@@ -14,6 +14,14 @@ ROOT_FIELDS = {"fixtures"}
 FIXTURE_FIELDS = {"id", "surface", "input", "expected_result"}
 
 
+def build_error_report(message: str) -> dict[str, object]:
+    return {
+        "schema_version": "hostile-fixtures-validation-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
+
+
 def load_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -64,7 +72,17 @@ def main() -> int:
     args = parser.parse_args()
 
     fixture_path = Path(args.fixtures)
-    errors = validate_fixtures(load_json(fixture_path))
+    try:
+        data = load_json(fixture_path)
+    except SystemExit as exc:
+        message = str(exc)
+        if args.format == "json":
+            print(json.dumps(build_error_report(message), indent=2, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
+        return 1
+
+    errors = validate_fixtures(data)
     result = {"fixtures": str(fixture_path), "errors": errors}
     if args.format == "json":
         print(json.dumps(result, indent=2, ensure_ascii=False))

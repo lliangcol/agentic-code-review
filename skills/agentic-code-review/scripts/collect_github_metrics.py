@@ -96,6 +96,30 @@ def median(values: list[float]) -> float:
     return round(statistics.median(values), 3) if values else 0
 
 
+def require_object_items(items: list[Any], source: str) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for index, item in enumerate(items):
+        if isinstance(item, dict):
+            result.append(item)
+        else:
+            errors.append(f"{source}[{index}] must be an object")
+    if errors:
+        raise ValueError("; ".join(errors))
+    return result
+
+
+def non_negative_number(value: Any, field: str) -> float:
+    if value is None or value == "":
+        return 0
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field} must be a non-negative number")
+    number = float(value)
+    if number < 0:
+        raise ValueError(f"{field} must be a non-negative number")
+    return number
+
+
 def is_human_review(review: dict[str, Any]) -> bool:
     user = review.get("user")
     return isinstance(user, dict) and user.get("type") == "User"
@@ -117,12 +141,12 @@ def label_names(labels: Any) -> set[str]:
 
 def extract_prs(data: Any) -> list[dict[str, Any]]:
     if isinstance(data, list):
-        return [item for item in data if isinstance(item, dict)]
+        return require_object_items(data, "pull_requests")
     if isinstance(data, dict):
         for key in ["pull_requests", "prs", "items"]:
             value = data.get(key)
             if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
+                return require_object_items(value, key)
     raise SystemExit("Input must be a JSON array or an object with pull_requests/prs/items")
 
 
@@ -247,12 +271,12 @@ def collect(
         if len(human_reviews) > 1:
             rereview_count += len(human_reviews) - 1
 
-        files_changed.append(float(pr.get("changed_files", 0) or 0))
-        additions = float(pr.get("additions", 0) or 0)
-        deletions = float(pr.get("deletions", 0) or 0)
+        files_changed.append(non_negative_number(pr.get("changed_files", 0), f"{prefix}.changed_files"))
+        additions = non_negative_number(pr.get("additions", 0), f"{prefix}.additions")
+        deletions = non_negative_number(pr.get("deletions", 0), f"{prefix}.deletions")
         changed = additions + deletions
         changed_lines.append(changed)
-        test_changed = float(pr.get("test_changed_lines", 0) or 0)
+        test_changed = non_negative_number(pr.get("test_changed_lines", 0), f"{prefix}.test_changed_lines")
         test_ratios.append(round(min(test_changed / changed, 1), 3) if changed else 0)
 
         labels = label_names(pr.get("labels", []))
@@ -290,6 +314,14 @@ def collect(
     }
 
 
+def build_error_report(message: str) -> dict[str, object]:
+    return {
+        "schema_version": "github-metrics-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Collect review-capacity metrics from GitHub PR JSON.")
     parser.add_argument("input_json")
@@ -313,8 +345,12 @@ def main() -> int:
             records = extract_adjudication_records(load_json(Path(adjudication_path)))
             adjudications.extend(validate_adjudication_records(records, str(adjudication_path)))
         row = collect(prs, args.repository, args.period_start, args.period_end, adjudications)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
+    except (SystemExit, ValueError) as exc:
+        message = str(exc) or "collect_github_metrics.py failed"
+        if args.format == "json":
+            print(json.dumps(build_error_report(message), indent=2, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
         return 1
 
     if args.format == "json":

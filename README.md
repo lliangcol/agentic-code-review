@@ -106,6 +106,12 @@ For batches of PRs or diffs, it can triage work into `Safe-looking`, `Needs work
 
 Optional references cover CI/gate integrity, ready-to-run heterogeneous reviewer prompts, persisted reviewer-comparison records, machine-readable batch triage, hostile-input fixtures, human-on-the-loop audit plans, reviewer calibration, and a diff measurement helper for cheap review-effort signals.
 
+When `validate_batch_triage.py` is called with `--format json`, input failures such as invalid JSON emit structured JSON errors on stdout with a non-zero exit code; record-level validation failures stay in the normal JSON result's `errors` array.
+
+When `validate_reviewer_comparison.py` is called with `--format json`, input failures such as invalid JSON emit structured JSON errors on stdout with a non-zero exit code; record-level validation failures stay in the normal JSON result's `errors` array.
+
+When `validate_hostile_fixtures.py` is called with `--format json`, input failures such as invalid JSON emit structured JSON errors on stdout with a non-zero exit code; fixture-level validation failures stay in the normal JSON result's `errors` array.
+
 ## Source Notes
 
 The article source rationale is preserved as paraphrased notes in `docs/agentic-code-review-source-notes.md`. The implementation comparison and improvement inventory live in `docs/agentic-code-review-implementation-analysis.md`.
@@ -119,6 +125,10 @@ Use `docs/open-source-readiness.md` before the first public GitHub push or any l
 AI-generated throughput can increase review and QA load. Do not use throughput alone as proof of review quality. Track review capacity, zero-review merges, review duration, `Not reviewable` rate, gate failures, and reviewer calibration before reducing safety checks.
 
 Use `skills/agentic-code-review/assets/review-capacity-metrics.template.csv` and `skills/agentic-code-review/assets/review-capacity-metrics.schema.json` as starter artifacts for team metric collection. Validate collected metrics with `skills/agentic-code-review/scripts/validate_metrics.py`; derive starter rows from exported GitHub PR JSON with `skills/agentic-code-review/scripts/collect_github_metrics.py`.
+
+When `validate_metrics.py` is called with `--format json`, input and schema failures emit structured JSON errors on stdout with a non-zero exit code; row-level validation failures stay in the normal JSON result's `errors` array.
+
+When `collect_github_metrics.py` is called with `--format json`, input and validation failures such as unsupported payload shapes or invalid periods emit structured JSON errors on stdout with a non-zero exit code.
 
 To include AI reviewer quality fields, pass one or more reviewer-comparison or adjudication records:
 
@@ -146,14 +156,23 @@ The runner provides:
 - Multi-pass prompt orchestration from `assets/review-prompt-manifest.json`.
 - Prompt versioning through template IDs and versions.
 - Timeout, retry, and fallback provider behavior.
+- Config validation for invalid providers, unknown fallback references, and fallback cycles before execution.
 - Provider attempt failure summaries for timeout, retry, and fallback review.
+- Best-effort redaction of common secret-like values in provider stdout/stderr before structured or raw provider output and attempt summaries are written to JSON or Markdown reports.
 - Estimated token and cost accounting.
-- Structured JSON reports with diff-rule fusion from `measure_diff.py`.
+- Structured JSON reports with diff-rule fusion from `measure_diff.py`, including structured diff-measurement failure reasons when the helper exits non-zero.
+- Structured `--format json` error output on stdout for config failures, with a non-zero exit code.
 - Prompt omission by default; pass `--include-prompts` only when you intentionally want rendered prompts in the report.
 
-Configure it with `skills/agentic-code-review/assets/review-runner.config.example.json`. A command provider receives the rendered prompt on stdin and must write its review output to stdout:
+Configure it with `skills/agentic-code-review/assets/review-runner.config.example.json`. A command provider receives the rendered prompt on stdin and must write its review output to stdout. Providers must still avoid printing secrets; output-stream redaction is a report-safety fallback, not a guarantee.
 
-Diff measurement defaults to the unstaged working-tree diff through `measure_diff_args: ["--no-untracked"]`. For a staged commit candidate, use `["--staged", "--no-untracked"]`; for a branch or working tree against a base revision, use `["--base", "origin/main", "--no-untracked"]`.
+The runner writes reports to stdout only; it has no output-file mode and no `--no-write` flag is needed to keep it from modifying files. `--dry-run` renders prompts, estimates tokens and cost, and skips provider calls. In `--format json`, runner config and context-file failures emit structured `review-runner-error-v1` JSON on stdout with stderr empty and a non-zero exit code. In `--format markdown`, configuration failures are printed to stderr and still return a non-zero exit code.
+
+Relative `prompt_manifest` paths are resolved from the runner config file directory. The smoke tests cover config and manifest paths containing spaces so automation should pass paths as argument-array values rather than shell-concatenated command strings.
+
+`--context-file` accepts repeated local file paths and reads them into the rendered prompt. In `--format json` mode, unreadable context files emit structured `review-runner-error-v1` errors on stdout with a non-zero exit code. The smoke tests cover context file paths containing spaces.
+
+Diff measurement defaults to the unstaged working-tree diff through `measure_diff_args: ["--no-untracked"]`. For a staged commit candidate, use `["--staged", "--no-untracked"]`; for a branch or working tree against a base revision, use `["--base", "origin/main", "--no-untracked"]`. When `measure_diff.py` is called directly with `--format json`, argument, config, missing-Git, and Git-context failures emit structured JSON errors on stdout with a non-zero exit code. The runner preserves those helper errors in `diff.errors` instead of replacing them with a generic subprocess failure.
 
 ```json
 {
@@ -219,6 +238,8 @@ Validate the runner config and prompt manifest without contacting a model provid
 ```powershell
 python .\skills\agentic-code-review\scripts\validate_review_runner.py --format json
 ```
+
+`validate_review_runner.py --config` uses the same config-relative `prompt_manifest` resolution as the runner. The smoke tests cover validator config and manifest paths containing spaces.
 
 For a Claude Code smoke check, install to a test repository's `.claude/skills` directory or the configured global Claude skills destination, confirm the installed folder contains `SKILL.md`, `references/`, `assets/`, and `scripts/`, then invoke `/agentic-code-review` in Claude Code from that test repository.
 
