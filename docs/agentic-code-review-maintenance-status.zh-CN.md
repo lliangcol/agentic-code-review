@@ -76,7 +76,8 @@
 - 在英文和简体中文 README 中补充 runner stdout/stderr、exit-code、dry-run 和 no-write 行为说明。
 - 为 `run_review_passes.py --format json` 增加 runner invalid-config JSON stdout purity 覆盖。
 - 扩展 hostile fixture 覆盖，加入 prompt injection、workflow weakening、dependency metadata、release metadata、tool execution 和 secret exposure 示例。
+- 增加 runner missing-prompt-manifest JSON stdout purity 覆盖，并包含带空格的 manifest path。
 
 ## 下一轮建议
 
-继续做聚焦的 JSON stdout purity 或文档打磨。合适的下一步是补充仍缺少 stdout-only 测试的 runner/validator edge cases，并在发现新的 risky review surfaces 时继续扩展 hostile fixture categories。
+继续做聚焦的 JSON stdout purity 或文档打磨。合适的下一步是 validator prompt-manifest edge cases，并在发现新的 risky review surfaces 时继续扩展 hostile fixture categories。

@@ -2069,6 +2069,62 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertTrue(data["errors"][0].startswith(f"Invalid JSON {config}:"))
             self.assertEqual(result.stderr, "")
 
+    def test_review_runner_missing_prompt_manifest_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "runner manifest path with spaces"
+            root.mkdir()
+            config = root / "runner.json"
+            missing = root / "missing prompt manifest.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(missing),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "mock-primary",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(data["schema_version"], "review-runner-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Cannot read {missing}:"))
+            self.assertEqual(result.stderr, "")
+
     def test_review_runner_preserves_measure_diff_json_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

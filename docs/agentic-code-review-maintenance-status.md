@@ -76,7 +76,8 @@ Default behavior stays review-only. The workflow must check reviewability first,
 - Documented runner stdout/stderr, exit-code, dry-run, and no-write behavior in the English and Simplified Chinese READMEs.
 - Added runner invalid-config JSON stdout purity coverage for `run_review_passes.py --format json`.
 - Expanded hostile fixture coverage for prompt injection, workflow weakening, dependency metadata, release metadata, tool execution, and secret exposure examples.
+- Added runner missing-prompt-manifest JSON stdout purity coverage, including a manifest path containing spaces.
 
 ## Next Round Recommendation
 
-Continue with focused JSON stdout purity or documentation polish. Good next targets are remaining runner/validator edge cases that still lack explicit stdout-only tests, plus additional hostile fixture categories as new risky review surfaces are discovered.
+Continue with focused JSON stdout purity or documentation polish. Good next targets are validator prompt-manifest edge cases, plus additional hostile fixture categories as new risky review surfaces are discovered.
