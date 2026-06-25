@@ -2267,6 +2267,63 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
             self.assertEqual(result.stderr, "")
 
+    def test_review_runner_empty_command_output_reports_provider_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "empty-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "empty-command": {
+                                "type": "command",
+                                "model": "empty",
+                                "command": [sys.executable, "-c", "pass"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "empty-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertEqual(review_pass["provider"], "empty-command")
+            self.assertEqual(review_pass["status"], "failed")
+            self.assertEqual(review_pass["attempts"][0]["status"], "failed")
+            self.assertEqual(review_pass["attempts"][0]["return_code"], 0)
+            self.assertIn("empty-command attempt 1 failed", review_pass["attempt_failures"])
+            self.assertIn("correctness: empty-command attempt 1 failed", data["fusion"]["provider_failures"])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+            self.assertEqual(result.stderr, "")
+
     def test_review_runner_mixed_mock_status_needs_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "runner.json"

@@ -65,7 +65,8 @@ Default behavior stays review-only. The workflow must check reviewability first,
 - Added a focused runner retry-exhaustion test that proves each failed command provider attempt is preserved in pass-level and fusion-level provider failure summaries while global stderr stays empty.
 - Strengthened the missing-command fallback test so command-not-found failures must appear in both pass-level and fusion-level provider failure summaries without relying on traceback absence alone.
 - Added a focused command provider timeout test that verifies timeout attempts are preserved in pass-level and fusion-level provider failure summaries and still produce a `Needs confirmation` fusion verdict.
+- Added a focused empty-output command provider test that verifies a zero-exit command with empty stdout is still reported as a provider failure without leaking to global stderr.
 
 ## Next Round Recommendation
 
-Focus on one empty-output reporting defect. The best next target is a focused command provider test that exits successfully with empty stdout and verifies the failure summary is clear without leaking to global stderr.
+Focus on one invalid JSON output reporting defect. The best next target is a focused command provider test that emits non-JSON stdout and verifies raw output stays bounded while output-contract warnings drive `Needs confirmation`.

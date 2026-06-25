@@ -65,7 +65,8 @@
 - 新增一个聚焦的 runner retry-exhaustion 测试，证明每次失败的 command provider attempt 都会保留在 pass-level 和 fusion-level provider failure summaries 中，同时全局 stderr 保持为空。
 - 强化 missing-command fallback 测试，要求 command-not-found failure 同时出现在 pass-level 和 fusion-level provider failure summaries 中，而不是只依赖没有 traceback。
 - 新增一个聚焦的 command provider timeout 测试，验证 timeout attempt 会保留在 pass-level 和 fusion-level provider failure summaries 中，并仍然产生 `Needs confirmation` fusion verdict。
+- 新增一个聚焦的 empty-output command provider 测试，验证零退出码但 stdout 为空的命令仍会报告为 provider failure，并且不会泄漏到全局 stderr。
 
 ## 下一轮建议
 
-聚焦一个 empty-output reporting 缺陷。最合适的下一步是添加一个 command provider 成功退出但 stdout 为空的聚焦测试，验证 failure summary 清晰且不会泄漏到全局 stderr。
+聚焦一个 invalid JSON output reporting 缺陷。最合适的下一步是添加一个 command provider 输出非 JSON stdout 的聚焦测试，验证 raw output 有边界，同时 output-contract warnings 驱动 `Needs confirmation`。
