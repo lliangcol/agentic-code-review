@@ -6,7 +6,8 @@ $ErrorActionPreference = 'Stop'
 
 function Fail {
     param([string]$Message)
-    throw "[agentic-code-review] $Message"
+    [Console]::Error.WriteLine("[agentic-code-review] $Message")
+    exit 1
 }
 
 function Assert-LineEndings {

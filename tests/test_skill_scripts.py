@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -3812,11 +3813,15 @@ class RepositoryWorkflowTests(unittest.TestCase):
             copy_current_worktree(root)
             workflow = root / ".github" / "workflows" / "validate.yml"
             text = workflow.read_text(encoding="utf-8")
+            unpinned_text, replacement_count = re.subn(
+                r"actions/setup-python@[0-9a-fA-F]{40}(?:\s*# [^\r\n]+)?",
+                "actions/setup-python@v5",
+                text,
+                count=1,
+            )
+            self.assertEqual(replacement_count, 1)
             workflow.write_text(
-                text.replace(
-                    "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5",
-                    "actions/setup-python@v5",
-                ),
+                unpinned_text,
                 encoding="utf-8",
                 newline="\n",
             )
