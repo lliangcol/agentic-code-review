@@ -290,6 +290,14 @@ def collect(
     }
 
 
+def build_error_report(message: str) -> dict[str, object]:
+    return {
+        "schema_version": "github-metrics-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Collect review-capacity metrics from GitHub PR JSON.")
     parser.add_argument("input_json")
@@ -313,8 +321,12 @@ def main() -> int:
             records = extract_adjudication_records(load_json(Path(adjudication_path)))
             adjudications.extend(validate_adjudication_records(records, str(adjudication_path)))
         row = collect(prs, args.repository, args.period_start, args.period_end, adjudications)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
+    except (SystemExit, ValueError) as exc:
+        message = str(exc) or "collect_github_metrics.py failed"
+        if args.format == "json":
+            print(json.dumps(build_error_report(message), indent=2, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
         return 1
 
     if args.format == "json":

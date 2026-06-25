@@ -205,7 +205,70 @@ class MeasureDiffTests(unittest.TestCase):
             result = run([sys.executable, str(MEASURE_DIFF), "--format", "json", "--config", str(config)], root, check=False)
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Threshold slice_map_files must be numeric", result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "diff-measurement-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["errors"], ["Threshold slice_map_files must be numeric"])
+            self.assertEqual(result.stderr, "")
+
+    def test_no_git_repository_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            result = run([sys.executable, str(MEASURE_DIFF), "--format", "json"], root, check=False)
+
+            self.assertEqual(result.returncode, 2)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "diff-measurement-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["errors"], ["measure_diff.py must run inside a Git repository"])
+            self.assertEqual(result.stderr, "")
+
+    def test_base_and_staged_conflict_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            init_repo(root)
+            (root / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+            commit_all(root)
+
+            result = run(
+                [
+                    sys.executable,
+                    str(MEASURE_DIFF),
+                    "--format",
+                    "json",
+                    "--base",
+                    "HEAD",
+                    "--staged",
+                ],
+                root,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "diff-measurement-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["errors"], ["--base and --staged cannot be used together"])
+            self.assertEqual(result.stderr, "")
+
+    def test_missing_git_executable_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            result = run(
+                [sys.executable, str(MEASURE_DIFF), "--format", "json"],
+                root,
+                check=False,
+                env={"PATH": ""},
+            )
+
+            self.assertEqual(result.returncode, 2)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "diff-measurement-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["errors"], ["git executable not found on PATH"])
+            self.assertEqual(result.stderr, "")
 
 
 class ValidateMetricsTests(unittest.TestCase):
@@ -296,6 +359,34 @@ class ValidateMetricsTests(unittest.TestCase):
             self.assertIn("row 2: has more values than header columns", result.stderr)
             self.assertNotIn("Traceback", result.stderr)
 
+    def test_metrics_invalid_schema_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            csv_path = Path(temp) / "metrics.csv"
+            schema_path = Path(temp) / "schema.json"
+            csv_path.write_text(METRICS_HEADER + "\n", encoding="utf-8")
+            schema_path.write_text("{not json", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_METRICS),
+                    str(csv_path),
+                    "--schema",
+                    str(schema_path),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "metrics-validation-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON schema {schema_path}:"))
+            self.assertEqual(result.stderr, "")
+
 
 class AssetValidatorTests(unittest.TestCase):
     def test_batch_triage_template_validates(self) -> None:
@@ -384,6 +475,30 @@ class AssetValidatorTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("items[0].human_owner must be a string", result.stderr)
 
+    def test_batch_triage_invalid_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            record = Path(temp) / "batch.json"
+            record.write_text("{not json", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_BATCH_TRIAGE),
+                    str(record),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "batch-triage-validation-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON {record}:"))
+            self.assertEqual(result.stderr, "")
+
     def test_reviewer_comparison_example_validates(self) -> None:
         result = run([sys.executable, str(VALIDATE_REVIEWER_COMPARISON)], REPO_ROOT)
         self.assertIn("validation passed", result.stdout)
@@ -457,6 +572,30 @@ class AssetValidatorTests(unittest.TestCase):
             self.assertIn("reviewers[0] missing field: tool_or_model", result.stderr)
             self.assertIn("reviewers[0] unexpected field: extra", result.stderr)
             self.assertIn("unexpected field: approved", result.stderr)
+
+    def test_reviewer_comparison_invalid_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            record = Path(temp) / "reviewers.json"
+            record.write_text("{not json", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEWER_COMPARISON),
+                    str(record),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "reviewer-comparison-validation-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON {record}:"))
+            self.assertEqual(result.stderr, "")
 
     def test_reviewer_comparison_missing_required_lists_fail(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -586,6 +725,30 @@ class AssetValidatorTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unexpected field: merge_approved", result.stderr)
             self.assertIn("fixtures[0] unexpected field: approved", result.stderr)
+
+    def test_hostile_fixtures_invalid_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            record = Path(temp) / "fixtures.json"
+            record.write_text("{not json", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_HOSTILE_FIXTURES),
+                    str(record),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "hostile-fixtures-validation-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON {record}:"))
+            self.assertEqual(result.stderr, "")
 
 
 class MetricsCollectionTests(unittest.TestCase):
@@ -770,9 +933,12 @@ class MetricsCollectionTests(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("adjudication validation failed", result.stderr)
-            self.assertIn("valid_findings + false_positive_findings must not exceed findings", result.stderr)
-            self.assertNotIn("Traceback", result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertIn("adjudication validation failed", data["errors"][0])
+            self.assertIn("valid_findings + false_positive_findings must not exceed findings", data["errors"][0])
+            self.assertEqual(result.stderr, "")
 
     def test_collect_github_metrics_rereviews_validate(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1038,14 +1204,79 @@ class MetricsCollectionTests(unittest.TestCase):
                     "2026-01-08",
                     "--period-end",
                     "2026-01-07",
+                    "--format",
+                    "json",
                 ],
                 REPO_ROOT,
                 check=False,
             )
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("--period-start must be <= --period-end", result.stderr)
-            self.assertNotIn("Traceback", result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["errors"], ["--period-start must be <= --period-end"])
+            self.assertEqual(result.stderr, "")
+
+    def test_collect_github_metrics_unsupported_input_json_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            payload.write_text("{}", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["errors"], ["Input must be a JSON array or an object with pull_requests/prs/items"])
+            self.assertEqual(result.stderr, "")
+
+    def test_collect_github_metrics_invalid_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            payload.write_text("{not json", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON {payload}:"))
+            self.assertEqual(result.stderr, "")
 
 
 class ReviewRunnerTests(unittest.TestCase):
@@ -1065,6 +1296,89 @@ class ReviewRunnerTests(unittest.TestCase):
         self.assertEqual(data["errors"], [])
         self.assertIn("mock-primary", data["providers"])
         self.assertEqual(data["review_passes"], 3)
+
+    def test_validate_review_runner_invalid_config_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text("{not json", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["config"], str(config))
+            self.assertIsNone(data["prompt_manifest"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON {config}:"))
+            self.assertEqual(result.stderr, "")
+
+    def test_validate_review_runner_handles_config_and_manifest_paths_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "validator path with spaces"
+            assets = root / "manifest assets"
+            assets.mkdir(parents=True)
+            manifest = assets / "prompt manifest with spaces.json"
+            shutil.copyfile(ASSETS_DIR / "review-prompt-manifest.json", manifest)
+            config = root / "runner config with spaces.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": "manifest assets/prompt manifest with spaces.json",
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["config"], str(config))
+            self.assertEqual(data["prompt_manifest"], str(manifest))
+            self.assertEqual(data["providers"], ["mock-primary"])
+            self.assertEqual(data["review_passes"], 1)
+            self.assertEqual(data["errors"], [])
+            self.assertEqual(result.stderr, "")
 
     def test_validate_review_runner_missing_fallback_fails_cleanly(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1118,6 +1432,64 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertIn("providers.broken.fallback references unknown provider: missing-fallback", data["errors"])
             self.assertNotIn("Traceback", result.stderr)
 
+    def test_validate_review_runner_fallback_cycle_fails_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "primary": {
+                                "type": "mock",
+                                "model": "primary",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "secondary",
+                            },
+                            "secondary": {
+                                "type": "mock",
+                                "model": "secondary",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "primary",
+                            },
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn("provider fallback cycle detected: primary -> secondary -> primary", data["errors"])
+            self.assertNotIn("Traceback", result.stderr)
+
     def test_review_runner_dry_run_omits_prompts_by_default(self) -> None:
         result = run(
             [
@@ -1141,6 +1513,169 @@ class ReviewRunnerTests(unittest.TestCase):
         self.assertTrue(data["passes"])
         self.assertTrue(all(item["status"] == "dry_run" for item in data["passes"]))
         self.assertNotIn("prompt", data["passes"][0])
+
+    def test_review_runner_handles_config_and_manifest_paths_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "runner path with spaces"
+            assets = root / "manifest assets"
+            assets.mkdir(parents=True)
+            manifest = assets / "prompt manifest with spaces.json"
+            shutil.copyfile(ASSETS_DIR / "review-prompt-manifest.json", manifest)
+            config = root / "runner config with spaces.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": "manifest assets/prompt manifest with spaces.json",
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "default_provider": "mock-primary",
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--dry-run",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertEqual(data["config"], str(config))
+            self.assertEqual(data["prompt_manifest"], str(manifest))
+            self.assertEqual(data["diff"]["enabled"], False)
+            self.assertTrue(all(item["status"] == "dry_run" for item in data["passes"]))
+            self.assertNotIn("prompt", data["passes"][0])
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_handles_context_file_path_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "context path with spaces"
+            root.mkdir()
+            context = root / "review notes with spaces.md"
+            context.write_text("SYNTHETIC_CONTEXT_MARKER\n", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--format",
+                    "json",
+                    "--dry-run",
+                    "--no-diff",
+                    "--include-prompts",
+                    "--context-file",
+                    str(context),
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertIn("prompt", data["passes"][0])
+            self.assertIn("SYNTHETIC_CONTEXT_MARKER", data["passes"][0]["prompt"])
+            self.assertIn(str(context), data["passes"][0]["prompt"])
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_missing_context_file_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            missing = Path(temp) / "missing context with spaces.md"
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--format",
+                    "json",
+                    "--dry-run",
+                    "--no-diff",
+                    "--context-file",
+                    str(missing),
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(data["schema_version"], "review-runner-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Cannot read context file {missing}:"))
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_preserves_measure_diff_json_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = root / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": True, "measure_diff_args": ["--no-untracked"]},
+                        "default_provider": "mock-primary",
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--dry-run",
+                ],
+                root,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertEqual(data["diff"]["errors"], ["measure_diff.py must run inside a Git repository"])
+            self.assertEqual(result.stderr, "")
 
     def test_review_runner_falls_back_to_mock_provider(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1212,6 +1747,265 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertIn("broken-command attempt 1 failed", review_pass["attempt_failures"])
             self.assertIn("correctness: broken-command attempt 1 failed", data["fusion"]["provider_failures"])
             self.assertEqual(review_pass["structured_output"]["verdict"], "Needs confirmation")
+
+    def test_review_runner_redacts_secret_like_provider_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            synthetic_secret = "synthetic-secret-value-12345"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "leaky-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "leaky-command": {
+                                "type": "command",
+                                "model": "leaky",
+                                "command": [
+                                    sys.executable,
+                                    "-c",
+                                    "import sys; print('OPENAI_API_KEY=synthetic-secret-value-12345', file=sys.stderr); sys.exit(3)",
+                                ],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "mock-fallback",
+                            },
+                            "mock-fallback": {
+                                "type": "mock",
+                                "model": "fallback",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            },
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "leaky-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertNotIn(synthetic_secret, result.stdout)
+            self.assertEqual(review_pass["attempts"][0]["stderr"], "OPENAI_API_KEY=[redacted]")
+            self.assertIn("correctness: leaky-command attempt 1 failed: OPENAI_API_KEY=[redacted]", data["fusion"]["provider_failures"])
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_markdown_redacts_provider_failure_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            synthetic_secret = "synthetic-secret-value-markdown"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "leaky-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "leaky-command": {
+                                "type": "command",
+                                "model": "leaky",
+                                "command": [
+                                    sys.executable,
+                                    "-c",
+                                    "import sys; print('OPENAI_API_KEY=synthetic-secret-value-markdown', file=sys.stderr); sys.exit(3)",
+                                ],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "fallback": "mock-fallback",
+                            },
+                            "mock-fallback": {
+                                "type": "mock",
+                                "model": "fallback",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            },
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "leaky-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "markdown",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+
+            self.assertNotIn(synthetic_secret, result.stdout)
+            self.assertIn("OPENAI_API_KEY=[redacted]", result.stdout)
+            self.assertIn("## Provider Failures", result.stdout)
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_redacts_secret_like_provider_stdout(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            synthetic_secret = "synthetic-secret-value-67890"
+            provider_output = {
+                "verdict": "Needs confirmation",
+                "risk_tier": "L2",
+                "findings": [
+                    {
+                        "severity": "P2",
+                        "file": "synthetic.py",
+                        "line": 1,
+                        "message": f"provider stdout included OPENAI_API_KEY={synthetic_secret}",
+                    }
+                ],
+                "needs_confirmation": [],
+                "validation": [],
+                "ai_review_evidence": {"reviewer": "leaky-command"},
+                "residual_risk": [],
+            }
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "leaky-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "leaky-command": {
+                                "type": "command",
+                                "model": "leaky",
+                                "command": [
+                                    sys.executable,
+                                    "-c",
+                                    f"import json; print(json.dumps({provider_output!r}))",
+                                ],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "leaky-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertNotIn(synthetic_secret, result.stdout)
+            self.assertEqual(review_pass["structured_output"]["findings"][0]["message"], "provider stdout included OPENAI_API_KEY=[redacted]")
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_redacts_secret_like_raw_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            synthetic_secret = "synthetic-secret-value-raw"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "leaky-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "leaky-command": {
+                                "type": "command",
+                                "model": "leaky",
+                                "command": [
+                                    sys.executable,
+                                    "-c",
+                                    "print('raw provider output OPENAI_API_KEY=synthetic-secret-value-raw')",
+                                ],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "leaky-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertNotIn(synthetic_secret, result.stdout)
+            self.assertEqual(review_pass["raw_output"].strip(), "raw provider output OPENAI_API_KEY=[redacted]")
+            self.assertIn("correctness: structured-review-v1 output must be a JSON object", data["fusion"]["output_contract_errors"])
+            self.assertEqual(result.stderr, "")
 
     def test_review_runner_successful_fallback_needs_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1520,8 +2314,11 @@ class ReviewRunnerTests(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("command provider command must be a non-empty array of strings", result.stderr)
-            self.assertNotIn("Traceback", result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "review-runner-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["errors"], ["command provider command must be a non-empty array of strings"])
+            self.assertEqual(result.stderr, "")
 
 
 class ReviewFixLoopDetectionTests(unittest.TestCase):

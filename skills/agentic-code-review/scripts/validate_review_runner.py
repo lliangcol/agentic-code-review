@@ -61,6 +61,52 @@ def validate_provider(name: str, value: Any, providers: dict[str, Any]) -> list[
     return errors
 
 
+def canonical_cycle(cycle_members: list[str]) -> tuple[str, ...]:
+    rotations = [
+        tuple(cycle_members[index:] + cycle_members[:index])
+        for index in range(len(cycle_members))
+    ]
+    return min(rotations)
+
+
+def validate_fallback_chains(providers: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    emitted_cycles: set[tuple[str, ...]] = set()
+
+    for start in providers:
+        seen_at: dict[str, int] = {}
+        chain: list[str] = []
+        current = str(start)
+
+        while current:
+            provider = providers.get(current)
+            if not isinstance(provider, dict):
+                break
+
+            fallback = provider.get("fallback")
+            if not isinstance(fallback, str) or not fallback or fallback not in providers:
+                break
+            if fallback == current:
+                break
+
+            if current not in seen_at:
+                seen_at[current] = len(chain)
+                chain.append(current)
+
+            if fallback in seen_at:
+                cycle_members = chain[seen_at[fallback]:]
+                canonical = canonical_cycle(cycle_members)
+                if canonical not in emitted_cycles:
+                    emitted_cycles.add(canonical)
+                    cycle_path = [*canonical, canonical[0]]
+                    errors.append(f"provider fallback cycle detected: {' -> '.join(cycle_path)}")
+                break
+
+            current = fallback
+
+    return errors
+
+
 def validate_run_config(config: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     try:
@@ -175,6 +221,7 @@ def validate_config(config_path: Path, prompt_manifest_override: str | None = No
 
     for name, provider in providers.items():
         errors.extend(validate_provider(str(name), provider, providers))
+    errors.extend(validate_fallback_chains(providers))
 
     errors.extend(validate_run_config(config))
     if templates is not None:

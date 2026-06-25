@@ -118,6 +118,14 @@ def validate_record(data: Any) -> list[str]:
     return errors
 
 
+def build_error_report(message: str) -> dict[str, object]:
+    return {
+        "schema_version": "reviewer-comparison-validation-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate reviewer comparison JSON records.")
     default_asset_dir = Path(__file__).resolve().parents[1] / "assets"
@@ -126,7 +134,17 @@ def main() -> int:
     args = parser.parse_args()
 
     record_path = Path(args.record)
-    errors = validate_record(load_json(record_path))
+    try:
+        record = load_json(record_path)
+    except SystemExit as exc:
+        message = str(exc) or "validate_reviewer_comparison.py failed"
+        if args.format == "json":
+            print(json.dumps(build_error_report(message), indent=2, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
+        return 1
+
+    errors = validate_record(record)
     result = {"record": str(record_path), "errors": errors}
     if args.format == "json":
         print(json.dumps(result, indent=2, ensure_ascii=False))

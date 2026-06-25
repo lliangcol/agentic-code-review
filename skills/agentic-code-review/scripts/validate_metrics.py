@@ -169,6 +169,14 @@ def validate_csv(csv_path: Path, schema_path: Path) -> tuple[int, list[str]]:
         raise SystemExit(f"Cannot read metrics CSV {csv_path}: {exc}") from exc
 
 
+def build_error_report(message: str) -> dict[str, object]:
+    return {
+        "schema_version": "metrics-validation-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate agentic-code-review capacity metrics CSV files.")
     default_asset_dir = Path(__file__).resolve().parents[1] / "assets"
@@ -179,7 +187,16 @@ def main() -> int:
 
     csv_path = Path(args.csv_path)
     schema_path = Path(args.schema)
-    row_count, errors = validate_csv(csv_path, schema_path)
+    try:
+        row_count, errors = validate_csv(csv_path, schema_path)
+    except (SystemExit, ValueError) as exc:
+        message = str(exc) or "validate_metrics.py failed"
+        if args.format == "json":
+            print(json.dumps(build_error_report(message), indent=2, ensure_ascii=False))
+        else:
+            print(message, file=sys.stderr)
+        return 1
+
     result = {"csv": str(csv_path), "schema": str(schema_path), "rows": row_count, "errors": errors}
 
     if args.format == "json":

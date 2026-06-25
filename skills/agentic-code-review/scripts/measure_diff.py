@@ -64,6 +64,7 @@ RISK_TERM_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 DOC_LIKE_EXTENSIONS = {".md", ".markdown", ".rst", ".txt", ".csv"}
+GIT_NOT_FOUND_MESSAGE = "git executable not found on PATH"
 
 
 @dataclass
@@ -153,14 +154,17 @@ def load_review_config(path: str | None) -> ReviewConfig:
 
 
 def run_git(args: list[str]) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError as exc:
+        raise SystemExit(GIT_NOT_FOUND_MESSAGE) from exc
     if result.returncode != 0:
         raise SystemExit(result.stderr.strip() or f"git {' '.join(args)} failed")
     return result.stdout
@@ -372,6 +376,21 @@ def print_markdown(report: dict[str, object]) -> None:
                     print(f"- `{value}`")
 
 
+def build_error_report(message: str) -> dict[str, object]:
+    return {
+        "schema_version": "diff-measurement-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
+
+
+def print_error(message: str, output_format: str) -> None:
+    if output_format == "json":
+        print(json.dumps(build_error_report(message), indent=2, ensure_ascii=False))
+    else:
+        print(message, file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Measure cheap review-effort signals for a Git diff.")
     parser.add_argument("--base", help="Compare working tree or HEAD against this Git revision.")
@@ -382,15 +401,28 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.base and args.staged:
+        if args.format == "json":
+            print_error("--base and --staged cannot be used together", args.format)
+            return 2
         parser.error("--base and --staged cannot be used together")
 
     try:
         run_git(["rev-parse", "--show-toplevel"])
-    except SystemExit:
-        print("measure_diff.py must run inside a Git repository", file=sys.stderr)
+    except SystemExit as exc:
+        message = str(exc)
+        if message == GIT_NOT_FOUND_MESSAGE:
+            print_error(message, args.format)
+        else:
+            print_error("measure_diff.py must run inside a Git repository", args.format)
         return 2
 
-    report = build_report(args)
+    try:
+        report = build_report(args)
+    except SystemExit as exc:
+        message = str(exc) or "measure_diff.py failed"
+        print_error(message, args.format)
+        return 1
+
     if args.format == "json":
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:

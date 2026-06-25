@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -29,6 +30,15 @@ STRUCTURED_REVIEW_FIELD_TYPES = {
     "ai_review_evidence": dict,
     "residual_risk": list,
 }
+SENSITIVE_TEXT_PATTERNS = [
+    (
+        re.compile(r"\b([A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)[A-Z0-9_]*\s*[:=]\s*)([^\s,;\"']+)", re.IGNORECASE),
+        r"\1[redacted]",
+    ),
+    (re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE), "Bearer [redacted]"),
+    (re.compile(r"\bsk-[A-Za-z0-9]{12,}\b"), "sk-[redacted]"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{12,}\b"), "gh[redacted]"),
+]
 
 
 class ConfigError(ValueError):
@@ -169,6 +179,13 @@ def truncate_output(text: str, max_chars: int) -> tuple[str, bool]:
     return text[:max_chars] + "\n[truncated]", True
 
 
+def redact_sensitive_text(text: str) -> str:
+    redacted = text
+    for pattern, replacement in SENSITIVE_TEXT_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted
+
+
 def provider_pricing(provider: dict[str, Any]) -> tuple[float, float]:
     pricing = provider.get("pricing", {})
     if pricing is None:
@@ -265,7 +282,7 @@ def execute_provider(
                     stderr = ""
                 elif provider_type == "command":
                     completed = run_command_provider(provider, prompt)
-                    output = completed.stdout
+                    output = redact_sensitive_text(completed.stdout)
                     stderr = completed.stderr.strip()
                     return_code = completed.returncode
                     status = "ok" if completed.returncode == 0 and output.strip() else "failed"
@@ -279,7 +296,7 @@ def execute_provider(
                         "status": status,
                         "return_code": return_code,
                         "elapsed_ms": elapsed_ms,
-                        "stderr": stderr[:500],
+                        "stderr": redact_sensitive_text(stderr)[:500],
                         "output_truncated": truncated,
                     }
                 )
@@ -298,10 +315,10 @@ def execute_provider(
                     )
             except subprocess.TimeoutExpired as exc:
                 elapsed_ms = round((time.monotonic() - started) * 1000, 3)
-                attempts.append({"provider": current_name, "attempt": attempt_index + 1, "type": provider_type, "status": "timeout", "elapsed_ms": elapsed_ms, "stderr": str(exc)[:500]})
+                attempts.append({"provider": current_name, "attempt": attempt_index + 1, "type": provider_type, "status": "timeout", "elapsed_ms": elapsed_ms, "stderr": redact_sensitive_text(str(exc))[:500]})
             except OSError as exc:
                 elapsed_ms = round((time.monotonic() - started) * 1000, 3)
-                attempts.append({"provider": current_name, "attempt": attempt_index + 1, "type": provider_type, "status": "failed", "elapsed_ms": elapsed_ms, "stderr": str(exc)[:500]})
+                attempts.append({"provider": current_name, "attempt": attempt_index + 1, "type": provider_type, "status": "failed", "elapsed_ms": elapsed_ms, "stderr": redact_sensitive_text(str(exc))[:500]})
 
         fallback = provider.get("fallback")
         current_name = fallback if isinstance(fallback, str) and fallback else ""
@@ -397,11 +414,23 @@ def run_diff_measurement(config: dict[str, Any], no_diff: bool) -> dict[str, Any
     except subprocess.TimeoutExpired:
         return {"enabled": True, "report": None, "errors": ["measure_diff.py timed out"]}
     if completed.returncode != 0:
-        return {"enabled": True, "report": None, "errors": [completed.stderr.strip() or "measure_diff.py failed"]}
+        return {"enabled": True, "report": None, "errors": measure_diff_errors(completed)}
     try:
         return {"enabled": True, "report": json.loads(completed.stdout), "errors": []}
     except json.JSONDecodeError as exc:
         return {"enabled": True, "report": None, "errors": [f"measure_diff.py returned invalid JSON: {exc}"]}
+
+
+def measure_diff_errors(completed: subprocess.CompletedProcess[str]) -> list[str]:
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        errors = payload.get("errors")
+        if isinstance(errors, list) and errors and all(isinstance(error, str) and error for error in errors):
+            return errors
+    return [completed.stderr.strip() or "measure_diff.py failed"]
 
 
 def severity_blocks(findings: Any) -> bool:
@@ -575,6 +604,14 @@ def print_markdown(report: dict[str, Any]) -> None:
         print(f"- `{item['id']}`: `{item['status']}` via `{item['provider']}` (`{item['model']}`)")
 
 
+def build_error_report(message: str) -> dict[str, Any]:
+    return {
+        "schema_version": "review-runner-error-v1",
+        "ok": False,
+        "errors": [message],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run configured agentic-code-review passes.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="Runner config JSON path.")
@@ -590,7 +627,10 @@ def main() -> int:
     try:
         report = build_report(args)
     except ConfigError as exc:
-        print(str(exc), file=sys.stderr)
+        if args.format == "json":
+            print(json.dumps(build_error_report(str(exc)), indent=2, ensure_ascii=False))
+        else:
+            print(str(exc), file=sys.stderr)
         return 1
 
     if args.format == "json":
