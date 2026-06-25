@@ -2078,6 +2078,75 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["fusion"]["provider_failures"], ["correctness: broken-command attempt 1 failed"])
             self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
 
+    def test_review_runner_retry_exhaustion_reports_each_failed_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "retrying-command",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "retrying-command": {
+                                "type": "command",
+                                "model": "retrying",
+                                "command": [sys.executable, "-c", "import sys; print('temporary provider failure', file=sys.stderr); sys.exit(3)"],
+                                "timeout_seconds": 5,
+                                "max_retries": 1,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "retrying-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertEqual(review_pass["provider"], "retrying-command")
+            self.assertEqual(review_pass["status"], "failed")
+            self.assertEqual([attempt["attempt"] for attempt in review_pass["attempts"]], [1, 2])
+            self.assertTrue(all(attempt["status"] == "failed" for attempt in review_pass["attempts"]))
+            self.assertEqual(
+                review_pass["attempt_failures"],
+                [
+                    "retrying-command attempt 1 failed: temporary provider failure",
+                    "retrying-command attempt 2 failed: temporary provider failure",
+                ],
+            )
+            self.assertEqual(
+                data["fusion"]["provider_failures"],
+                [
+                    "correctness: retrying-command attempt 1 failed: temporary provider failure",
+                    "correctness: retrying-command attempt 2 failed: temporary provider failure",
+                ],
+            )
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+            self.assertEqual(result.stderr, "")
+
     def test_review_runner_missing_command_falls_back_without_traceback(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "runner.json"
@@ -2137,6 +2206,9 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(review_pass["status"], "mock")
             self.assertEqual(review_pass["attempts"][0]["provider"], "missing-command")
             self.assertEqual(review_pass["attempts"][0]["status"], "failed")
+            self.assertIn("missing-command attempt 1 failed", review_pass["attempt_failures"][0])
+            self.assertIn("correctness: missing-command attempt 1 failed", data["fusion"]["provider_failures"][0])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
             self.assertNotIn("Traceback", result.stderr)
 
     def test_review_runner_mixed_mock_status_needs_confirmation(self) -> None:

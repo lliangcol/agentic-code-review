@@ -62,7 +62,9 @@ Default behavior stays review-only. The workflow must check reviewability first,
 - Created this maintenance status file to support state-file-driven, small-step maintenance.
 - Added the Simplified Chinese companion file so local Markdown structure and localization checks remain enforceable.
 - Added a focused `validate_review_runner.py --format json` invalid-config test that proves structured errors are emitted on stdout, stderr stays empty, and the exit code is non-zero.
+- Added a focused runner retry-exhaustion test that proves each failed command provider attempt is preserved in pass-level and fusion-level provider failure summaries while global stderr stays empty.
+- Strengthened the missing-command fallback test so command-not-found failures must appear in both pass-level and fusion-level provider failure summaries without relying on traceback absence alone.
 
 ## Next Round Recommendation
 
-Focus on one runner failure-summary defect. The best next target is a focused unittest for command provider retry exhaustion or command-not-found behavior, then only change `run_review_passes.py` if the observed report is ambiguous or unsafe.
+Focus on one timeout reporting defect. The best next target is a focused command provider timeout test that verifies timeout attempts are summarized clearly and still produce a `Needs confirmation` fusion verdict.
