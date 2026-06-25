@@ -1601,6 +1601,77 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertIn(str(context), data["passes"][0]["prompt"])
             self.assertEqual(result.stderr, "")
 
+    def test_review_runner_config_cannot_record_prompts_without_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "mock-primary",
+                        "run": {
+                            "measure_diff": False,
+                            "include_prompt_in_report": True,
+                        },
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            without_flag = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--dry-run",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            without_flag_data = json.loads(without_flag.stdout)
+
+            with_flag = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--dry-run",
+                    "--no-diff",
+                    "--include-prompts",
+                ],
+                REPO_ROOT,
+            )
+            with_flag_data = json.loads(with_flag.stdout)
+
+            self.assertNotIn("prompt", without_flag_data["passes"][0])
+            self.assertIn("prompt", with_flag_data["passes"][0])
+            self.assertEqual(without_flag.stderr, "")
+            self.assertEqual(with_flag.stderr, "")
+
     def test_review_runner_missing_context_file_json_error_is_stdout_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             missing = Path(temp) / "missing context with spaces.md"

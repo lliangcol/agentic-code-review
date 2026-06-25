@@ -496,7 +496,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     providers = as_object(config.get("providers"), "providers")
     run_config = as_object(config.get("run", {}), "run")
     max_output_chars = int(as_non_negative_number(run_config.get("max_output_chars", 20000), "run.max_output_chars"))
-    include_prompt = bool(args.include_prompts or run_config.get("include_prompt_in_report", False))
+    include_prompt = bool(args.include_prompts)
     context = load_context(args.context_file or [])
     diff = run_diff_measurement(config, args.no_diff)
     diff_summary = json.dumps(diff.get("report"), indent=2, ensure_ascii=False) if diff.get("report") else "No diff measurement available."

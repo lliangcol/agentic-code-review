@@ -9,8 +9,7 @@
     "measure_diff": true,
     "measure_diff_timeout_seconds": 30,
     "measure_diff_args": ["--no-untracked"],
-    "max_output_chars": 20000,
-    "include_prompt_in_report": false
+    "max_output_chars": 20000
   },
   "providers": {
     "mock-primary": {
