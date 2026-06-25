@@ -51,7 +51,7 @@ Default behavior stays review-only. The workflow must check reviewability first,
 ## Backlog
 
 1. Add focused tests for JSON stdout purity across remaining validator and runner failure paths.
-2. Add cross-platform quoting tests for config, manifest, context-file, and output paths containing spaces.
+2. Keep cross-platform quoting coverage for config, manifest, prompt-manifest override, and context-file paths containing spaces.
 3. Expand runner provider failure summaries for timeout, retry exhaustion, fallback, empty output, invalid JSON output, and command-not-found behavior.
 4. Tighten documentation for remaining runner CLI edge cases without introducing write-capable defaults.
 5. Continue expanding hostile fixtures as new risky review surfaces are discovered.
@@ -78,6 +78,7 @@ Default behavior stays review-only. The workflow must check reviewability first,
 - Expanded hostile fixture coverage for prompt injection, workflow weakening, dependency metadata, release metadata, tool execution, and secret exposure examples.
 - Added runner missing-prompt-manifest JSON stdout purity coverage, including a manifest path containing spaces.
 - Added validator missing-prompt-manifest JSON stdout purity coverage, including a manifest path containing spaces.
+- Added runner and validator `--prompt-manifest` override quoting tests for manifest paths containing spaces.
 
 ## Next Round Recommendation
 

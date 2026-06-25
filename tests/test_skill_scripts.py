@@ -1395,6 +1395,62 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["errors"], [])
             self.assertEqual(result.stderr, "")
 
+    def test_validate_review_runner_handles_prompt_manifest_override_path_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "validator override path with spaces"
+            assets = root / "manifest assets"
+            assets.mkdir(parents=True)
+            manifest = assets / "override prompt manifest.json"
+            shutil.copyfile(ASSETS_DIR / "review-prompt-manifest.json", manifest)
+            config = root / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": "missing-default-manifest.json",
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--prompt-manifest",
+                    str(manifest),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["config"], str(config))
+            self.assertEqual(data["prompt_manifest"], str(manifest))
+            self.assertEqual(result.stderr, "")
+
     def test_validate_review_runner_rejects_unknown_top_level_config_keys(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "runner.json"
@@ -1696,6 +1752,65 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["diff"]["enabled"], False)
             self.assertTrue(all(item["status"] == "dry_run" for item in data["passes"]))
             self.assertNotIn("prompt", data["passes"][0])
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_handles_prompt_manifest_override_path_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "runner override path with spaces"
+            assets = root / "manifest assets"
+            assets.mkdir(parents=True)
+            manifest = assets / "override prompt manifest.json"
+            shutil.copyfile(ASSETS_DIR / "review-prompt-manifest.json", manifest)
+            config = root / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": "missing-default-manifest.json",
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "default_provider": "mock-primary",
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--prompt-manifest",
+                    str(manifest),
+                    "--format",
+                    "json",
+                    "--dry-run",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertEqual(data["config"], str(config))
+            self.assertEqual(data["prompt_manifest"], str(manifest))
+            self.assertTrue(all(item["status"] == "dry_run" for item in data["passes"]))
             self.assertEqual(result.stderr, "")
 
     def test_review_runner_handles_context_file_path_with_spaces(self) -> None:

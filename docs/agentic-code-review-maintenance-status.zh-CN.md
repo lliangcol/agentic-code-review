@@ -51,7 +51,7 @@
 ## Backlog
 
 1. 为剩余 validator 和 runner failure paths 补充 JSON stdout purity 聚焦测试。
-2. 为包含空格的 config、manifest、context-file 和 output paths 补充跨平台 quoting 测试。
+2. 保持包含空格的 config、manifest、prompt-manifest override 和 context-file paths 的跨平台 quoting 覆盖。
 3. 扩展 runner provider failure summaries，覆盖 timeout、retry exhaustion、fallback、empty output、invalid JSON output 和 command-not-found 行为。
 4. 收紧剩余 runner CLI edge cases 的文档说明，同时不引入可写默认行为。
 5. 随着新的 risky review surfaces 出现，继续扩展 hostile fixtures。
@@ -78,6 +78,7 @@
 - 扩展 hostile fixture 覆盖，加入 prompt injection、workflow weakening、dependency metadata、release metadata、tool execution 和 secret exposure 示例。
 - 增加 runner missing-prompt-manifest JSON stdout purity 覆盖，并包含带空格的 manifest path。
 - 增加 validator missing-prompt-manifest JSON stdout purity 覆盖，并包含带空格的 manifest path。
+- 为 runner 和 validator 的 `--prompt-manifest` override 增加包含空格的 manifest path quoting 测试。
 
 ## 下一轮建议
 
