@@ -171,6 +171,8 @@ Runner 提供：
 
 使用 `skills/agentic-code-review/assets/review-runner.config.example.json` 配置。Command provider 通过 stdin 接收渲染后的 prompt，并将 review 输出写到 stdout。Providers 仍必须避免打印 secrets；output-stream redaction 只是 report-safety fallback，不是安全保证。
 
+Runner 只把报告写到 stdout；它没有 output-file 模式，也不需要 `--no-write` flag 来防止修改文件。`--dry-run` 会渲染 prompts、估算 tokens 和 cost，并跳过 provider 调用。在 `--format json` 下，runner config 和 context-file failures 会在 stdout 输出结构化 `review-runner-error-v1` JSON，stderr 为空，并返回非零退出码。在 `--format markdown` 下，configuration failures 会写入 stderr，并同样返回非零退出码。
+
 相对 `prompt_manifest` 路径会基于 runner config 文件所在目录解析。Smoke tests 覆盖包含空格的 config 和 manifest 路径，因此自动化脚本应以 argument-array values 传递路径，而不是拼接 shell command string。
 
 `--context-file` 接受可重复的本地文件路径，并把内容读入渲染后的 prompt。在 `--format json` 模式下，不可读取的 context file 会在 stdout 输出结构化 `review-runner-error-v1` 错误并返回非零退出码。Smoke tests 覆盖包含空格的 context file 路径。

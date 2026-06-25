@@ -1948,6 +1948,60 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertIn("providers.mock-primary.pricing.input_cost is unsupported; remove unknown pricing config keys", data["errors"])
             self.assertEqual(result.stderr, "")
 
+    def test_validate_review_runner_rejects_unknown_review_pass_config_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "mock-primary",
+                        "run": {"measure_diff": False},
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                                "auto_merge": True,
+                                "write_files": True,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn("review_passes[0].auto_merge is unsupported; remove unknown review pass config keys", data["errors"])
+            self.assertIn("review_passes[0].write_files is unsupported; remove unknown review pass config keys", data["errors"])
+            self.assertEqual(result.stderr, "")
+
     def test_review_runner_missing_context_file_json_error_is_stdout_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             missing = Path(temp) / "missing context with spaces.md"
@@ -1972,6 +2026,32 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["schema_version"], "review-runner-error-v1")
             self.assertFalse(data["ok"])
             self.assertTrue(data["errors"][0].startswith(f"Cannot read context file {missing}:"))
+            self.assertEqual(result.stderr, "")
+
+    def test_review_runner_invalid_config_json_error_is_stdout_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text("{not json", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(data["schema_version"], "review-runner-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON {config}:"))
             self.assertEqual(result.stderr, "")
 
     def test_review_runner_preserves_measure_diff_json_errors(self) -> None:

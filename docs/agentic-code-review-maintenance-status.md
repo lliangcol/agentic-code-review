@@ -53,7 +53,7 @@ Default behavior stays review-only. The workflow must check reviewability first,
 1. Add focused tests for JSON stdout purity across remaining validator and runner failure paths.
 2. Add cross-platform quoting tests for config, manifest, context-file, and output paths containing spaces.
 3. Expand runner provider failure summaries for timeout, retry exhaustion, fallback, empty output, invalid JSON output, and command-not-found behavior.
-4. Tighten documentation for `--dry-run`, `--no-write`, `--format json`, stdout and stderr contracts, exit codes, and write-file behavior.
+4. Tighten documentation for remaining runner CLI edge cases without introducing write-capable defaults.
 5. Add hostile fixture coverage for prompt injection, workflow weakening, dependency metadata, release metadata, tool execution, and secret exposure examples.
 6. Keep README, Simplified Chinese README, Skill references, assets, and local validators synchronized without claiming review quality or cost savings.
 
@@ -71,7 +71,11 @@ Default behavior stays review-only. The workflow must check reviewability first,
 - Added fail-closed runner config validation for unknown `run` keys so stale or risky controls such as auto-merge or write-file flags cannot be silently ignored.
 - Added fail-closed provider config validation for unknown provider keys so misplaced secrets or misspelled timeout fields cannot be silently accepted.
 - Added fail-closed pricing config validation for unknown pricing keys so misspelled cost fields cannot be treated as zero-cost defaults.
+- Added fail-closed top-level runner config validation for unknown keys so stale controls outside `run`, `providers`, and `review_passes` cannot be silently accepted.
+- Added fail-closed review pass config validation for unknown pass-level keys so stale or risky per-pass controls cannot be silently accepted.
+- Documented runner stdout/stderr, exit-code, dry-run, and no-write behavior in the English and Simplified Chinese READMEs.
+- Added runner invalid-config JSON stdout purity coverage for `run_review_passes.py --format json`.
 
 ## Next Round Recommendation
 
-Continue runner configuration hygiene with one small fail-closed check. The best next target is top-level runner config unknown keys, so stale controls outside `run`, `providers`, and `review_passes` cannot be silently accepted.
+Continue with focused JSON stdout purity or documentation polish. Good next targets are remaining runner/validator edge cases that still lack explicit stdout-only tests, plus hostile fixture expansion for prompt injection, workflow weakening, dependency metadata, release metadata, tool execution, and secret exposure examples.

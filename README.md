@@ -166,6 +166,8 @@ The runner provides:
 
 Configure it with `skills/agentic-code-review/assets/review-runner.config.example.json`. A command provider receives the rendered prompt on stdin and must write its review output to stdout. Providers must still avoid printing secrets; output-stream redaction is a report-safety fallback, not a guarantee.
 
+The runner writes reports to stdout only; it has no output-file mode and no `--no-write` flag is needed to keep it from modifying files. `--dry-run` renders prompts, estimates tokens and cost, and skips provider calls. In `--format json`, runner config and context-file failures emit structured `review-runner-error-v1` JSON on stdout with stderr empty and a non-zero exit code. In `--format markdown`, configuration failures are printed to stderr and still return a non-zero exit code.
+
 Relative `prompt_manifest` paths are resolved from the runner config file directory. The smoke tests cover config and manifest paths containing spaces so automation should pass paths as argument-array values rather than shell-concatenated command strings.
 
 `--context-file` accepts repeated local file paths and reads them into the rendered prompt. In `--format json` mode, unreadable context files emit structured `review-runner-error-v1` errors on stdout with a non-zero exit code. The smoke tests cover context file paths containing spaces.

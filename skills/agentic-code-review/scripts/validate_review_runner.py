@@ -208,6 +208,15 @@ def validate_review_passes(config: dict[str, Any], templates: dict[str, dict[str
             errors.append(str(exc))
             continue
 
+        allowed_fields = {
+            "enabled",
+            "id",
+            "provider",
+            "template_id",
+        }
+        for field in sorted(set(review_pass) - allowed_fields):
+            errors.append(f"review_passes[{index}].{field} is unsupported; remove unknown review pass config keys")
+
         enabled = review_pass.get("enabled", True)
         if not isinstance(enabled, bool):
             errors.append(f"review_passes[{index}].enabled must be a boolean when set")
