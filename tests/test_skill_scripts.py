@@ -1613,7 +1613,6 @@ class ReviewRunnerTests(unittest.TestCase):
                         "default_provider": "mock-primary",
                         "run": {
                             "measure_diff": False,
-                            "include_prompt_in_report": True,
                         },
                         "providers": {
                             "mock-primary": {
@@ -1671,6 +1670,63 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertIn("prompt", with_flag_data["passes"][0])
             self.assertEqual(without_flag.stderr, "")
             self.assertEqual(with_flag.stderr, "")
+
+    def test_validate_review_runner_rejects_config_prompt_recording(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "default_provider": "mock-primary",
+                        "run": {
+                            "measure_diff": False,
+                            "include_prompt_in_report": True,
+                        },
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn(
+                "run.include_prompt_in_report is unsupported; pass --include-prompts when prompt recording is intentionally required",
+                data["errors"],
+            )
+            self.assertEqual(result.stderr, "")
 
     def test_review_runner_missing_context_file_json_error_is_stdout_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

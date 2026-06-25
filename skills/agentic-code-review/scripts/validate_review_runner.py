@@ -116,8 +116,8 @@ def validate_run_config(config: dict[str, Any]) -> list[str]:
 
     if "measure_diff" in run_config and not isinstance(run_config["measure_diff"], bool):
         errors.append("run.measure_diff must be a boolean")
-    if "include_prompt_in_report" in run_config and not isinstance(run_config["include_prompt_in_report"], bool):
-        errors.append("run.include_prompt_in_report must be a boolean")
+    if "include_prompt_in_report" in run_config:
+        errors.append("run.include_prompt_in_report is unsupported; pass --include-prompts when prompt recording is intentionally required")
 
     for field, default in [("measure_diff_timeout_seconds", 30), ("max_output_chars", 20000)]:
         try:
