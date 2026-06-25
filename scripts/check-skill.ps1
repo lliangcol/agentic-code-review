@@ -338,10 +338,18 @@ foreach ($marker in $validateWorkflowMarkers) {
     }
 }
 
-foreach ($match in [regex]::Matches($validateWorkflowText, '(?m)^\s*uses:\s*(?<Action>[^\s#]+)')) {
-    $action = $match.Groups['Action'].Value
-    if ($action -notmatch '@[0-9a-fA-F]{40}$') {
-        Fail "Validate workflow action must pin full commit SHA: $action"
+$workflowFiles = @(
+    Get-ChildItem -LiteralPath (Join-Path $repo '.github/workflows') -File -Recurse |
+        Where-Object { $_.Name -match '\.ya?ml$' }
+)
+
+foreach ($workflowFile in $workflowFiles) {
+    $workflowText = Get-Content -LiteralPath $workflowFile.FullName -Raw -Encoding UTF8
+    foreach ($match in [regex]::Matches($workflowText, '(?m)^\s*(?:-\s*)?uses:\s*(?<Action>[^\s#]+)')) {
+        $action = $match.Groups['Action'].Value
+        if ($action -notmatch '@[0-9a-fA-F]{40}$') {
+            Fail "Validate workflow action must pin full commit SHA: $action"
+        }
     }
 }
 

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from types import ModuleType
@@ -3824,6 +3825,35 @@ class RepositoryWorkflowTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Validate workflow action must pin full commit SHA: actions/setup-python@v5", result.stderr + result.stdout)
+
+    def test_check_skill_fails_when_any_workflow_action_is_not_sha_pinned(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "copy"
+            copy_current_worktree(root)
+            workflow = root / ".github" / "workflows" / "supplemental.yaml"
+            workflow.write_text(
+                textwrap.dedent(
+                    """\
+                    name: Supplemental
+
+                    on:
+                      workflow_dispatch:
+
+                    jobs:
+                      supplemental:
+                        runs-on: ubuntu-latest
+                        steps:
+                          - uses: actions/cache@v4
+                    """
+                ),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            result = run(["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(root / "scripts" / "check-skill.ps1")], root, check=False)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Validate workflow action must pin full commit SHA: actions/cache@v4", result.stderr + result.stdout)
 
 
 class SchemaValidatorConsistencyTests(unittest.TestCase):
