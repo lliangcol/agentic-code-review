@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
 import re
 import subprocess
 import sys
@@ -67,6 +68,10 @@ DOC_LIKE_EXTENSIONS = {".md", ".markdown", ".rst", ".txt", ".csv"}
 GIT_NOT_FOUND_MESSAGE = "git executable not found on PATH"
 
 
+def reject_json_constant(value: str) -> None:
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
 @dataclass
 class FileStat:
     path: str
@@ -92,17 +97,22 @@ class ReviewConfig:
 def compile_patterns(patterns: object, field_name: str) -> re.Pattern[str]:
     if not isinstance(patterns, list) or not patterns or not all(isinstance(item, str) for item in patterns):
         raise SystemExit(f"{field_name} must be a non-empty list of regex strings")
-    return re.compile("|".join(f"(?:{pattern})" for pattern in patterns), re.I)
+    try:
+        return re.compile("|".join(f"(?:{pattern})" for pattern in patterns), re.I)
+    except re.error as exc:
+        raise SystemExit(f"{field_name} contains invalid regex: {exc}") from exc
 
 
 def load_review_config(path: str | None) -> ReviewConfig:
     config = copy.deepcopy(DEFAULT_CONFIG)
     if path:
         try:
-            user_config = json.loads(Path(path).read_text(encoding="utf-8"))
+            user_config = json.loads(Path(path).read_text(encoding="utf-8"), parse_constant=reject_json_constant)
         except OSError as exc:
             raise SystemExit(f"Cannot read config {path}: {exc}") from exc
         except json.JSONDecodeError as exc:
+            raise SystemExit(f"Invalid JSON config {path}: {exc}") from exc
+        except ValueError as exc:
             raise SystemExit(f"Invalid JSON config {path}: {exc}") from exc
         if not isinstance(user_config, dict):
             raise SystemExit("Config root must be a JSON object")
@@ -140,7 +150,7 @@ def load_review_config(path: str | None) -> ReviewConfig:
     numeric_thresholds: dict[str, float] = {}
     for key in sorted(required_thresholds):
         value = thresholds[key]
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
             raise SystemExit(f"Threshold {key} must be numeric")
         numeric_thresholds[key] = float(value)
 

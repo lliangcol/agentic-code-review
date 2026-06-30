@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import re
 import sys
 from datetime import date
@@ -17,12 +18,18 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 EXTRA_COLUMNS_KEY = "__extra_columns__"
 
 
+def reject_json_constant(value: str) -> None:
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
 def load_schema(path: Path) -> dict[str, Any]:
     try:
-        schema = json.loads(path.read_text(encoding="utf-8"))
+        schema = json.loads(path.read_text(encoding="utf-8"), parse_constant=reject_json_constant)
     except OSError as exc:
         raise SystemExit(f"Cannot read schema {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid JSON schema {path}: {exc}") from exc
+    except ValueError as exc:
         raise SystemExit(f"Invalid JSON schema {path}: {exc}") from exc
     if not isinstance(schema, dict):
         raise SystemExit("Schema root must be an object")
@@ -31,9 +38,12 @@ def load_schema(path: Path) -> dict[str, Any]:
 
 def parse_number(value: str, column: str, row_num: int) -> float:
     try:
-        return float(value)
+        number = float(value)
     except ValueError as exc:
         raise ValueError(f"row {row_num}: {column} must be a number") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"row {row_num}: {column} must be a finite number")
+    return number
 
 
 def parse_integer(value: str, column: str, row_num: int) -> int:

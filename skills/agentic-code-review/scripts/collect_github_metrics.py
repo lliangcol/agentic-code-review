@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import re
 import statistics
 import sys
@@ -45,11 +46,17 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 def load_json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"), parse_constant=reject_json_constant)
     except OSError as exc:
         raise SystemExit(f"Cannot read {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise SystemExit(f"Invalid JSON {path}: {exc}") from exc
+    except ValueError as exc:
+        raise SystemExit(f"Invalid JSON {path}: {exc}") from exc
+
+
+def reject_json_constant(value: str) -> None:
+    raise ValueError(f"Invalid JSON constant: {value}")
 
 
 def parse_time(value: Any, field: str) -> datetime | None:
@@ -115,7 +122,7 @@ def non_negative_number(value: Any, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field} must be a non-negative number")
     number = float(value)
-    if number < 0:
+    if not math.isfinite(number) or number < 0:
         raise ValueError(f"{field} must be a non-negative number")
     return number
 
@@ -247,7 +254,12 @@ def collect(
             None,
         )
         resolved_at = parse_time(pr.get(resolution_field), f"{prefix}.{resolution_field}") if resolution_field else None
-        reviews = [review for review in pr.get("reviews", []) if isinstance(review, dict)]
+        reviews_value = pr.get("reviews", [])
+        if reviews_value is None:
+            reviews_value = []
+        if not isinstance(reviews_value, list):
+            raise ValueError(f"{prefix}.reviews must be an array")
+        reviews = require_object_items(reviews_value, f"{prefix}.reviews")
         human_reviews = [(review_index, review) for review_index, review in enumerate(reviews) if is_human_review(review)]
         human_review_times = sorted(
             filter(
