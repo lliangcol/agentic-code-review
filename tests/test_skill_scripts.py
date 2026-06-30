@@ -213,6 +213,63 @@ class MeasureDiffTests(unittest.TestCase):
             self.assertEqual(data["errors"], ["Threshold slice_map_files must be numeric"])
             self.assertEqual(result.stderr, "")
 
+    def test_measure_diff_rejects_boolean_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            init_repo(root)
+            (root / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+            commit_all(root)
+            (root / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+            config = root / "bad.json"
+            config.write_text('{"thresholds": {"slice_map_files": true}}', encoding="utf-8")
+
+            result = run([sys.executable, str(MEASURE_DIFF), "--format", "json", "--config", str(config)], root, check=False)
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "diff-measurement-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertEqual(data["errors"], ["Threshold slice_map_files must be numeric"])
+            self.assertEqual(result.stderr, "")
+
+    def test_measure_diff_invalid_regex_config_returns_json_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            init_repo(root)
+            (root / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+            commit_all(root)
+            (root / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+            config = root / "bad-regex.json"
+            config.write_text('{"test_path_patterns": ["("]}', encoding="utf-8")
+
+            result = run([sys.executable, str(MEASURE_DIFF), "--format", "json", "--config", str(config)], root, check=False)
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "diff-measurement-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertIn("test_path_patterns contains invalid regex", data["errors"][0])
+            self.assertEqual(result.stderr, "")
+
+    def test_measure_diff_rejects_non_standard_json_constants(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            init_repo(root)
+            (root / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+            commit_all(root)
+            (root / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+            config = root / "nan-config.json"
+            config.write_text('{"thresholds": {"slice_map_files": NaN}}', encoding="utf-8")
+
+            result = run([sys.executable, str(MEASURE_DIFF), "--format", "json", "--config", str(config)], root, check=False)
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "diff-measurement-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON config {config}: Invalid JSON constant: NaN"))
+            self.assertEqual(result.stderr, "")
+
     def test_no_git_repository_json_error_is_stdout_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -361,6 +418,20 @@ class ValidateMetricsTests(unittest.TestCase):
             self.assertIn("row 2: has more values than header columns", result.stderr)
             self.assertNotIn("Traceback", result.stderr)
 
+    def test_metrics_reject_non_finite_numbers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            csv_path = Path(temp) / "metrics.csv"
+            csv_path.write_text(
+                METRICS_HEADER + "\n"
+                "2026-01-01,2026-01-07,repo,1,0,nan,0,1,2,0.2,0,0,0,0,0,0,0,bad finite\n",
+                encoding="utf-8",
+            )
+
+            result = run([sys.executable, str(VALIDATE_METRICS), str(csv_path)], REPO_ROOT, check=False)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("row 2: median_time_to_first_review_hours must be a finite number", result.stderr)
+
     def test_metrics_invalid_schema_json_error_is_stdout_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             csv_path = Path(temp) / "metrics.csv"
@@ -387,6 +458,37 @@ class ValidateMetricsTests(unittest.TestCase):
             self.assertEqual(data["schema_version"], "metrics-validation-error-v1")
             self.assertFalse(data["ok"])
             self.assertTrue(data["errors"][0].startswith(f"Invalid JSON schema {schema_path}:"))
+            self.assertEqual(result.stderr, "")
+
+    def test_metrics_rejects_non_standard_schema_json_constants(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            csv_path = Path(temp) / "metrics.csv"
+            schema_path = Path(temp) / "schema.json"
+            csv_path.write_text(METRICS_HEADER + "\n", encoding="utf-8")
+            schema_path.write_text(
+                '{"required":["period_start"],"properties":{"period_start":{"type":"string"},"change_count":{"type":"number","minimum":NaN}}}',
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_METRICS),
+                    str(csv_path),
+                    "--schema",
+                    str(schema_path),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "metrics-validation-error-v1")
+            self.assertFalse(data["ok"])
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON schema {schema_path}: Invalid JSON constant: NaN"))
             self.assertEqual(result.stderr, "")
 
 
@@ -1220,6 +1322,82 @@ class MetricsCollectionTests(unittest.TestCase):
             self.assertEqual(data["errors"], ["pull_requests[0].changed_files must be a non-negative number"])
             self.assertEqual(result.stderr, "")
 
+    def test_collect_github_metrics_rejects_non_finite_change_numbers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            payload.write_text(
+                "[{\"created_at\":\"2026-01-01T00:00:00Z\",\"merged_at\":\"2026-01-02T00:00:00Z\","
+                "\"changed_files\":NaN,\"additions\":1,\"deletions\":1,\"reviews\":[]}]\n",
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertTrue(data["errors"][0].startswith(f"Invalid JSON {payload}: Invalid JSON constant: NaN"))
+            self.assertEqual(result.stderr, "")
+
+    def test_collect_github_metrics_rejects_non_object_review_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            payload = Path(temp) / "prs.json"
+            payload.write_text(
+                json.dumps(
+                    [
+                        {
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "merged_at": "2026-01-02T00:00:00Z",
+                            "changed_files": 1,
+                            "additions": 1,
+                            "deletions": 1,
+                            "reviews": ["not a review object"],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(COLLECT_GITHUB_METRICS),
+                    str(payload),
+                    "--repository",
+                    "owner/repo",
+                    "--period-start",
+                    "2026-01-01",
+                    "--period-end",
+                    "2026-01-07",
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["schema_version"], "github-metrics-error-v1")
+            self.assertEqual(data["errors"], ["pull_requests[0].reviews[0] must be an object"])
+            self.assertEqual(result.stderr, "")
+
     def test_collect_github_metrics_caps_test_change_ratio(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             payload = Path(temp) / "prs.json"
@@ -1574,6 +1752,61 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertEqual(data["providers"], ["mock-primary"])
             self.assertEqual(data["review_passes"], 1)
             self.assertEqual(data["errors"], [])
+            self.assertEqual(result.stderr, "")
+
+    def test_validate_review_runner_rejects_boolean_numbers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False, "max_output_chars": True},
+                        "providers": {
+                            "mock-primary": {
+                                "type": "mock",
+                                "model": "offline-mock-reviewer",
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                                "pricing": {
+                                    "input_per_million_tokens_usd": True,
+                                    "output_per_million_tokens_usd": 0,
+                                },
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "mock-primary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(VALIDATE_REVIEW_RUNNER),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                ],
+                REPO_ROOT,
+                check=False,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(data["ok"])
+            self.assertIn("run.max_output_chars must be a non-negative number", data["errors"])
+            self.assertIn("providers.mock-primary.pricing.input_per_million_tokens_usd must be a non-negative number", data["errors"])
             self.assertEqual(result.stderr, "")
 
     def test_validate_review_runner_handles_prompt_manifest_override_path_with_spaces(self) -> None:
@@ -3501,6 +3734,193 @@ class ReviewRunnerTests(unittest.TestCase):
             self.assertIn("correctness: missing required field: needs_confirmation", data["fusion"]["output_contract_errors"])
             self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
 
+    def test_review_runner_pass_verdict_and_risk_feed_fusion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            negative_output = {
+                "verdict": "Not ready",
+                "risk_tier": "L4",
+                "findings": [],
+                "needs_confirmation": ["reviewer says stop"],
+                "validation": [],
+                "ai_review_evidence": {"reviewer": "negative-command"},
+                "residual_risk": ["blocking reviewer verdict should affect fusion"],
+            }
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "negative-command": {
+                                "type": "command",
+                                "model": "negative",
+                                "command": [sys.executable, "-c", f"import json; print(json.dumps({negative_output!r}))"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "negative-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+
+            self.assertEqual(data["passes"][0]["structured_output_errors"], [])
+            self.assertEqual(data["fusion"]["verdict"], "Not ready")
+            self.assertEqual(data["fusion"]["risk_tier"], "L4")
+
+    def test_review_runner_rejects_malformed_finding_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            malformed_output = {
+                "verdict": "Ready",
+                "risk_tier": "L1",
+                "findings": [
+                    "P1: command reviewer emitted a string finding",
+                    {"file": "synthetic.py", "line": 1, "message": "missing severity"},
+                    {"severity": "P3", "file": "   ", "line": 0, "message": "bad location"},
+                ],
+                "needs_confirmation": [],
+                "validation": [],
+                "ai_review_evidence": {"reviewer": "malformed-command"},
+                "residual_risk": [],
+            }
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "malformed-command": {
+                                "type": "command",
+                                "model": "malformed",
+                                "command": [sys.executable, "-c", f"import json; print(json.dumps({malformed_output!r}))"],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "malformed-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertIn("findings[0] must be a JSON object", review_pass["structured_output_errors"])
+            self.assertIn("findings[1].severity is required", review_pass["structured_output_errors"])
+            self.assertIn("findings[2].file must be a non-empty string", review_pass["structured_output_errors"])
+            self.assertIn("findings[2].line must be a positive integer", review_pass["structured_output_errors"])
+            self.assertIn("correctness: findings[0] must be a JSON object", data["fusion"]["output_contract_errors"])
+            self.assertIn("correctness: findings[1].severity is required", data["fusion"]["output_contract_errors"])
+            self.assertIn("correctness: findings[2].file must be a non-empty string", data["fusion"]["output_contract_errors"])
+            self.assertIn("correctness: findings[2].line must be a positive integer", data["fusion"]["output_contract_errors"])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+
+    def test_review_runner_rejects_non_standard_json_constants(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "runner.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "prompt_manifest": str(ASSETS_DIR / "review-prompt-manifest.json"),
+                        "output_contract": "structured-review-v1",
+                        "run": {"measure_diff": False, "max_output_chars": 20000},
+                        "providers": {
+                            "nan-command": {
+                                "type": "command",
+                                "model": "nan",
+                                "command": [
+                                    sys.executable,
+                                    "-c",
+                                    "print('{\"verdict\":\"Ready\",\"risk_tier\":\"L1\",\"findings\":[],"
+                                    "\"needs_confirmation\":[NaN],\"validation\":[],"
+                                    "\"ai_review_evidence\":{},\"residual_risk\":[]}')",
+                                ],
+                                "timeout_seconds": 5,
+                                "max_retries": 0,
+                            }
+                        },
+                        "review_passes": [
+                            {
+                                "id": "correctness",
+                                "enabled": True,
+                                "template_id": "correctness-regression",
+                                "provider": "nan-command",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = run(
+                [
+                    sys.executable,
+                    str(RUN_REVIEW_PASSES),
+                    "--config",
+                    str(config),
+                    "--format",
+                    "json",
+                    "--no-diff",
+                ],
+                REPO_ROOT,
+            )
+            data = json.loads(result.stdout)
+            review_pass = data["passes"][0]
+
+            self.assertIsNone(review_pass["structured_output"])
+            self.assertEqual(review_pass["structured_output_errors"], ["structured-review-v1 output must be a JSON object"])
+            self.assertIn("correctness: structured-review-v1 output must be a JSON object", data["fusion"]["output_contract_errors"])
+            self.assertEqual(data["fusion"]["verdict"], "Needs confirmation")
+
     def test_review_runner_rejects_shell_string_command(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / "runner.json"
@@ -3738,6 +4158,31 @@ class RepositoryWorkflowTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("overlap", result.stderr + result.stdout)
+
+    def test_install_local_rejects_source_overlap_without_creating_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "copy"
+            copy_current_worktree(root)
+            bad_destination = root / "skills" / "agentic-code-review" / "created-before-fail"
+
+            result = run(
+                [
+                    "pwsh",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(root / "scripts" / "install-local.ps1"),
+                    "-Destination",
+                    str(bad_destination),
+                ],
+                root,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("overlap", result.stderr + result.stdout)
+            self.assertFalse(bad_destination.exists())
 
     def test_install_local_claude_code_rejects_codex_destination_even_with_claude_destination(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

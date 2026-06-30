@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -21,6 +22,7 @@ MEASURE_DIFF = Path(__file__).resolve().with_name("measure_diff.py")
 DEFAULT_CONFIG = ASSET_DIR / "review-runner.config.example.json"
 ALLOWED_VERDICTS = {"Ready", "Not ready", "Needs confirmation", "Not reviewable"}
 ALLOWED_RISK_TIERS = {"L0", "L1", "L2", "L3", "L4"}
+RISK_TIER_VALUES = {"L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
 STRUCTURED_REVIEW_FIELD_TYPES = {
     "verdict": str,
     "risk_tier": str,
@@ -63,11 +65,17 @@ def now_iso() -> str:
 
 def load_json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"), parse_constant=reject_json_constant)
     except OSError as exc:
         raise ConfigError(f"Cannot read {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise ConfigError(f"Invalid JSON {path}: {exc}") from exc
+    except ValueError as exc:
+        raise ConfigError(f"Invalid JSON {path}: {exc}") from exc
+
+
+def reject_json_constant(value: str) -> None:
+    raise ValueError(f"Invalid JSON constant: {value}")
 
 
 def as_object(value: Any, name: str) -> dict[str, Any]:
@@ -83,7 +91,7 @@ def as_string(value: Any, name: str) -> str:
 
 
 def as_non_negative_number(value: Any, name: str) -> float:
-    if not isinstance(value, (int, float)) or value < 0:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or value < 0:
         raise ConfigError(f"{name} must be a non-negative number")
     return float(value)
 
@@ -210,7 +218,7 @@ def validate_provider_config(name: str, value: Any, providers: dict[str, Any]) -
         provider_type = as_string(provider.get("type"), f"providers.{name}.type")
         as_string(provider.get("model", name), f"providers.{name}.model")
         as_non_negative_number(provider.get("timeout_seconds", 120), f"providers.{name}.timeout_seconds")
-        provider_pricing(provider)
+        provider_pricing(provider, f"providers.{name}")
     except ConfigError as exc:
         return [str(exc)]
 
@@ -440,14 +448,14 @@ def redact_sensitive_text(text: str) -> str:
     return redacted
 
 
-def provider_pricing(provider: dict[str, Any]) -> tuple[float, float]:
+def provider_pricing(provider: dict[str, Any], name: str = "provider") -> tuple[float, float]:
     pricing = provider.get("pricing", {})
     if pricing is None:
         pricing = {}
-    pricing_obj = as_object(pricing, "provider.pricing")
+    pricing_obj = as_object(pricing, f"{name}.pricing")
     return (
-        as_non_negative_number(pricing_obj.get("input_per_million_tokens_usd", 0), "pricing.input_per_million_tokens_usd"),
-        as_non_negative_number(pricing_obj.get("output_per_million_tokens_usd", 0), "pricing.output_per_million_tokens_usd"),
+        as_non_negative_number(pricing_obj.get("input_per_million_tokens_usd", 0), f"{name}.pricing.input_per_million_tokens_usd"),
+        as_non_negative_number(pricing_obj.get("output_per_million_tokens_usd", 0), f"{name}.pricing.output_per_million_tokens_usd"),
     )
 
 
@@ -584,8 +592,8 @@ def parse_structured_output(output: str) -> dict[str, Any] | None:
     if not output.strip():
         return None
     try:
-        parsed = json.loads(output)
-    except json.JSONDecodeError:
+        parsed = json.loads(output, parse_constant=reject_json_constant)
+    except (json.JSONDecodeError, ValueError):
         return None
     return parsed if isinstance(parsed, dict) else None
 
@@ -607,6 +615,25 @@ def validate_structured_output(output: dict[str, Any], contract: dict[str, Any],
     risk_tier = output.get("risk_tier")
     if isinstance(risk_tier, str) and risk_tier not in ALLOWED_RISK_TIERS:
         errors.append(f"risk_tier must be one of: {', '.join(sorted(ALLOWED_RISK_TIERS))}")
+
+    findings = output.get("findings")
+    if isinstance(findings, list):
+        for index, finding in enumerate(findings):
+            if not isinstance(finding, dict):
+                errors.append(f"findings[{index}] must be a JSON object")
+                continue
+
+            severity = finding.get("severity")
+            if severity is None:
+                errors.append(f"findings[{index}].severity is required")
+            elif not isinstance(severity, str) or severity.upper() not in {"P1", "P2", "P3", "P4"}:
+                errors.append(f"findings[{index}].severity must be one of: P1, P2, P3, P4")
+            file_path = finding.get("file")
+            if file_path is not None and (not isinstance(file_path, str) or not file_path.strip()):
+                errors.append(f"findings[{index}].file must be a non-empty string")
+            line = finding.get("line")
+            if line is not None and (type(line) is not int or line < 1):
+                errors.append(f"findings[{index}].line must be a positive integer")
 
     return errors
 
@@ -670,15 +697,15 @@ def run_diff_measurement(config: dict[str, Any], no_diff: bool) -> dict[str, Any
     if completed.returncode != 0:
         return {"enabled": True, "report": None, "errors": measure_diff_errors(completed)}
     try:
-        return {"enabled": True, "report": json.loads(completed.stdout), "errors": []}
-    except json.JSONDecodeError as exc:
+        return {"enabled": True, "report": json.loads(completed.stdout, parse_constant=reject_json_constant), "errors": []}
+    except (json.JSONDecodeError, ValueError) as exc:
         return {"enabled": True, "report": None, "errors": [f"measure_diff.py returned invalid JSON: {exc}"]}
 
 
 def measure_diff_errors(completed: subprocess.CompletedProcess[str]) -> list[str]:
     try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError:
+        payload = json.loads(completed.stdout, parse_constant=reject_json_constant)
+    except (json.JSONDecodeError, ValueError):
         payload = None
     if isinstance(payload, dict):
         errors = payload.get("errors")
@@ -696,12 +723,25 @@ def severity_blocks(findings: Any) -> bool:
     return False
 
 
+def max_risk_tier(tiers: list[str]) -> str:
+    known = [tier for tier in tiers if tier in RISK_TIER_VALUES]
+    if not known:
+        return "L1"
+    return max(known, key=lambda tier: RISK_TIER_VALUES[tier])
+
+
 def fuse_review(diff: dict[str, Any], pass_results: list[dict[str, Any]]) -> dict[str, Any]:
     diff_report = diff.get("report") if isinstance(diff, dict) else None
     warnings = diff_report.get("warnings", []) if isinstance(diff_report, dict) else []
     statuses = {str(item.get("status")) for item in pass_results}
     structured = [item.get("structured_output") for item in pass_results if isinstance(item.get("structured_output"), dict)]
     blocking_findings = any(severity_blocks(item.get("findings")) for item in structured)
+    reviewer_verdicts = [item.get("verdict") for item in structured if isinstance(item.get("verdict"), str)]
+    reviewer_risk_tiers = [item.get("risk_tier") for item in structured if isinstance(item.get("risk_tier"), str)]
+    reviewer_needs_confirmation = any(
+        isinstance(item.get("needs_confirmation"), list) and bool(item.get("needs_confirmation"))
+        for item in structured
+    )
     output_contract_errors = [
         f"{item.get('id')}: {error}"
         for item in pass_results
@@ -715,19 +755,29 @@ def fuse_review(diff: dict[str, Any], pass_results: list[dict[str, Any]]) -> dic
 
     if "large-diff-not-reviewable-threshold" in warnings:
         verdict = "Not reviewable"
-    elif blocking_findings:
+    elif blocking_findings or "Not ready" in reviewer_verdicts:
         verdict = "Not ready"
-    elif warnings or output_contract_errors or provider_failures or statuses & {"mock", "dry_run", "failed"}:
+    elif "Not reviewable" in reviewer_verdicts:
+        verdict = "Not reviewable"
+    elif (
+        "Needs confirmation" in reviewer_verdicts
+        or reviewer_needs_confirmation
+        or warnings
+        or output_contract_errors
+        or provider_failures
+        or statuses & {"mock", "dry_run", "failed"}
+    ):
         verdict = "Needs confirmation"
     else:
         verdict = "Ready"
 
     if "risk-tier-escalation-required" in warnings:
-        risk_tier = "L3"
+        rule_risk_tier = "L3"
     elif warnings:
-        risk_tier = "L2"
+        rule_risk_tier = "L2"
     else:
-        risk_tier = "L1"
+        rule_risk_tier = "L1"
+    risk_tier = max_risk_tier([rule_risk_tier, *reviewer_risk_tiers])
 
     return {
         "verdict": verdict,

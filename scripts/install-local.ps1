@@ -80,9 +80,8 @@ function New-InstallTarget {
         [object[]]$ExistingTargets
     )
 
-    New-Item -ItemType Directory -Force -Path $DestinationPath | Out-Null
-    $resolvedDestination = (Resolve-Path -LiteralPath $DestinationPath).Path
-    $target = Join-Path $resolvedDestination 'agentic-code-review'
+    $unresolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestinationPath)
+    $target = Join-Path $unresolvedDestination 'agentic-code-review'
     $fullTarget = [System.IO.Path]::GetFullPath($target)
     $targetPrefix = $fullTarget.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
 
@@ -98,6 +97,9 @@ function New-InstallTarget {
             throw "Runtime install targets must not overlap: $fullTarget and $($existing.FullTarget)"
         }
     }
+
+    New-Item -ItemType Directory -Force -Path $unresolvedDestination | Out-Null
+    $resolvedDestination = (Resolve-Path -LiteralPath $unresolvedDestination).Path
 
     [pscustomobject]@{
         Runtime = $RuntimeName
